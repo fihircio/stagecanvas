@@ -31,6 +31,12 @@ Mock Unity bridge logs:
 stagecanvas-render-node --node-id render-node-1 --label "Render Node 1" --bridge mock-unity
 ```
 
+Periodic diagnostics logs (useful while debugging reconnection/command handling):
+
+```bash
+stagecanvas-render-node --node-id render-node-1 --label "Render Node 1" --log-state-every-sec 2
+```
+
 ## Run Two Nodes (sync test)
 
 Terminal A:
@@ -47,7 +53,14 @@ stagecanvas-render-node --node-id render-node-2 --label "Render Node 2"
 
 Then use the control UI `PLAY_AT (+3s)` action to verify both nodes enter `PLAYING` together.
 
+## Run Tests
+
+```bash
+python -m unittest discover -s render-node/tests -p 'test_*.py'
+```
+
 ## Notes
 
 - This agent is the control/runtime layer for the future Unity renderer integration.
 - Unity output/mapping can now plug into `app/bridge.py` without changing orchestration protocol flow.
+- Agent retries node registration with backoff and keeps connection/error diagnostics internally.

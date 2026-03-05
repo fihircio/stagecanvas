@@ -107,11 +107,13 @@ class NodeRegistry:
         self,
         node_id: str,
         cmd: ControlCommand,
-    ) -> tuple[NodeRecord | None, dict[str, Any] | None]:
+    ) -> tuple[NodeRecord | None, dict[str, Any] | None, str]:
         async with self._lock:
             record = self._nodes.get(node_id)
             if record is None:
-                return None, None
+                return None, None, "NOT_REGISTERED"
+            if cmd.seq <= record.command_seq:
+                return record, None, "DUPLICATE_OR_STALE_SEQ"
             envelope = {
                 "type": "COMMAND",
                 "version": cmd.version,
@@ -126,7 +128,7 @@ class NodeRegistry:
             }
             record.command_seq = max(record.command_seq, cmd.seq)
             record.pending_commands.append(envelope)
-            return record, envelope
+            return record, envelope, "QUEUED"
 
     async def dequeue_pending(self, node_id: str) -> list[dict[str, Any]]:
         async with self._lock:

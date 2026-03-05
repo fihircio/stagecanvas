@@ -30,3 +30,25 @@ export type DriftSloSnapshot = {
   warn_ms: number;
   critical_ms: number;
 };
+
+export type TimelineClip = {
+  clip_id: string;
+  label: string;
+  start_ms: number;
+  duration_ms: number;
+  kind: "video" | "audio" | "image" | "alpha" | "trigger";
+};
+
+export type TimelineTrack = {
+  track_id: string;
+  label: string;
+  kind: "video" | "audio" | "image" | "alpha" | "trigger";
+  clips: TimelineClip[];
+};
+
+export type TimelineSnapshot = {
+  show_id: string;
+  duration_ms: number;
+  playhead_ms: number;
+  tracks: TimelineTrack[];
+};

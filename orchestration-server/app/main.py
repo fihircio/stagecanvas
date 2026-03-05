@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from contextlib import suppress
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,11 +16,20 @@ from .models import (
     OperatorCommandRequest,
     RegisterNodeRequest,
     SchedulePlayAtRequest,
+    TimelineShowSummary,
+    TimelineSnapshotResponse,
+    TimelineUpsertClipRequest,
+    TimelineUpsertShowRequest,
+    TimelineUpsertTrackRequest,
 )
+from .command_ledger import CommandLedger
 from .registry import NodeRegistry
+from .timeline_repository import TimelineRepository
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
+timeline_repo = TimelineRepository(Path(__file__).resolve().parent.parent / "data" / "timeline.db")
+command_ledger = CommandLedger(Path(__file__).resolve().parent.parent / "data" / "orchestration.db")
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,33 +77,148 @@ async def slo_snapshot() -> dict[str, object]:
     }
 
 
+@app.get("/api/v1/timeline/snapshot", response_model=TimelineSnapshotResponse)
+async def timeline_snapshot(show_id: str = "demo-show") -> TimelineSnapshotResponse:
+    nodes = await registry.list_nodes()
+    playhead_ms = 0
+    if nodes:
+        playhead_ms = max(int(node.get("position_ms", 0)) for node in nodes)
+    try:
+        return timeline_repo.snapshot(show_id=show_id, playhead_ms=playhead_ms)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/timeline/shows", response_model=list[TimelineShowSummary])
+async def timeline_list_shows() -> list[TimelineShowSummary]:
+    return timeline_repo.list_shows()
+
+
+@app.put("/api/v1/timeline/shows/{show_id}")
+async def timeline_upsert_show(show_id: str, body: TimelineUpsertShowRequest) -> dict[str, object]:
+    timeline_repo.upsert_show(show_id=show_id, duration_ms=body.duration_ms)
+    return {"ok": True, "show_id": show_id}
+
+
+@app.delete("/api/v1/timeline/shows/{show_id}")
+async def timeline_delete_show(show_id: str) -> dict[str, object]:
+    try:
+        timeline_repo.delete_show(show_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "show_id": show_id}
+
+
+@app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}")
+async def timeline_upsert_track(show_id: str, track_id: str, body: TimelineUpsertTrackRequest) -> dict[str, object]:
+    try:
+        timeline_repo.upsert_track(
+            show_id=show_id,
+            track_id=track_id,
+            label=body.label,
+            kind=body.kind,
+            position=body.position,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "show_id": show_id, "track_id": track_id}
+
+
+@app.delete("/api/v1/timeline/shows/{show_id}/tracks/{track_id}")
+async def timeline_delete_track(show_id: str, track_id: str) -> dict[str, object]:
+    try:
+        timeline_repo.delete_track(show_id=show_id, track_id=track_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "show_id": show_id, "track_id": track_id}
+
+
+@app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}")
+async def timeline_upsert_clip(
+    show_id: str,
+    track_id: str,
+    clip_id: str,
+    body: TimelineUpsertClipRequest,
+) -> dict[str, object]:
+    try:
+        timeline_repo.upsert_clip(
+            show_id=show_id,
+            track_id=track_id,
+            clip_id=clip_id,
+            label=body.label,
+            start_ms=body.start_ms,
+            duration_ms=body.duration_ms,
+            kind=body.kind,
+            position=body.position,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "show_id": show_id, "track_id": track_id, "clip_id": clip_id}
+
+
+@app.delete("/api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}")
+async def timeline_delete_clip(show_id: str, track_id: str, clip_id: str) -> dict[str, object]:
+    try:
+        timeline_repo.delete_clip(show_id=show_id, track_id=track_id, clip_id=clip_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "show_id": show_id, "track_id": track_id, "clip_id": clip_id}
+
+
 async def _dispatch_to_nodes(command: ControlCommand, node_ids: list[str]) -> dict[str, object]:
     delivered = 0
     queued = 0
     missing = 0
+    skipped = 0
+    per_node: list[dict[str, str]] = []
     targets = list(dict.fromkeys(node_ids))
+    if len(targets) == 0:
+        return {
+            "ok": False,
+            "command": command.command,
+            "seq": command.seq,
+            "target_count": 0,
+            "delivered_count": 0,
+            "queued_count": 0,
+            "missing_count": 0,
+            "skipped_count": 0,
+            "per_node": [],
+            "reason_code": "NO_TARGETS",
+            "message": "No target nodes resolved for command dispatch.",
+        }
     for node_id in targets:
-        record, envelope = await registry.enqueue_command(node_id, command)
-        if record is None or envelope is None:
+        record, envelope, reason = await registry.enqueue_command(node_id, command)
+        if record is None:
             missing += 1
+            per_node.append({"node_id": node_id, "status": "missing", "reason_code": reason})
+            continue
+        if envelope is None:
+            skipped += 1
+            per_node.append({"node_id": node_id, "status": "skipped", "reason_code": reason})
             continue
         if record.ws is not None and record.connected:
             try:
                 await record.ws.send_text(json.dumps(envelope))
                 delivered += 1
                 await registry.dequeue_pending(node_id)
+                per_node.append({"node_id": node_id, "status": "delivered", "reason_code": "SENT_TO_SOCKET"})
             except RuntimeError:
                 queued += 1
+                per_node.append({"node_id": node_id, "status": "queued", "reason_code": "SOCKET_SEND_ERROR"})
         else:
             queued += 1
+            per_node.append({"node_id": node_id, "status": "queued", "reason_code": "OFFLINE_QUEUED"})
 
     return {
         "ok": True,
         "command": command.command,
+        "seq": command.seq,
         "target_count": len(targets),
         "delivered_count": delivered,
         "queued_count": queued,
         "missing_count": missing,
+        "skipped_count": skipped,
+        "per_node": per_node,
     }
 
 
@@ -107,17 +232,32 @@ async def broadcast_command(body: ControlCommand) -> dict[str, object]:
 async def node_command(node_id: str, body: ControlCommand) -> dict[str, object]:
     result = await _dispatch_to_nodes(body, [node_id])
     if result["missing_count"] == 1:
-        raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
+        raise HTTPException(
+            status_code=404,
+            detail={"reason_code": "NOT_REGISTERED", "message": f"Node not found: {node_id}"},
+        )
     return result
 
 
 @app.post("/api/v1/shows/play_at")
 async def schedule_play_at(body: SchedulePlayAtRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="play_at",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
     now_ms = int(time.time() * 1000)
     if body.target_time_ms < (now_ms + MIN_PLAY_AT_LEAD_MS):
         raise HTTPException(
             status_code=422,
-            detail=f"PLAY_AT requires at least {MIN_PLAY_AT_LEAD_MS}ms lead time.",
+            detail={
+                "reason_code": "PLAY_AT_LEAD_TIME_TOO_SHORT",
+                "message": f"PLAY_AT requires at least {MIN_PLAY_AT_LEAD_MS}ms lead time.",
+                "min_lead_ms": MIN_PLAY_AT_LEAD_MS,
+            },
         )
 
     command = ControlCommand(
@@ -125,64 +265,106 @@ async def schedule_play_at(body: SchedulePlayAtRequest) -> dict[str, object]:
         command="PLAY_AT",
         payload={"show_id": body.show_id, **body.payload},
         target_time_ms=body.target_time_ms,
-        seq=int(time.time() * 1000),
+        seq=command_ledger.next_seq(),
         origin="scheduler",
     )
     target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
-    return {"ok": True, "scheduled": True, "play_at": body.target_time_ms, "dispatch": result}
+    response = {"ok": True, "scheduled": True, "play_at": body.target_time_ms, "dispatch": result}
+    command_ledger.finalize_request("play_at", body.request_id, response)
+    return response
 
 
 @app.post("/api/v1/operators/pause")
 async def operator_pause(body: OperatorCommandRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="operator_pause",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="PAUSE",
         payload=body.payload,
-        seq=int(time.time() * 1000),
+        seq=command_ledger.next_seq(),
         origin="operator",
     )
     target_ids = body.node_ids or await registry.active_node_ids()
-    return await _dispatch_to_nodes(command, target_ids)
+    result = await _dispatch_to_nodes(command, target_ids)
+    command_ledger.finalize_request("operator_pause", body.request_id, result)
+    return result
 
 
 @app.post("/api/v1/operators/stop")
 async def operator_stop(body: OperatorCommandRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="operator_stop",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="STOP",
         payload=body.payload,
-        seq=int(time.time() * 1000),
+        seq=command_ledger.next_seq(),
         origin="operator",
     )
     target_ids = body.node_ids or await registry.active_node_ids()
-    return await _dispatch_to_nodes(command, target_ids)
+    result = await _dispatch_to_nodes(command, target_ids)
+    command_ledger.finalize_request("operator_stop", body.request_id, result)
+    return result
 
 
 @app.post("/api/v1/operators/load_show")
 async def operator_load_show(body: OperatorCommandRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="operator_load_show",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="LOAD_SHOW",
         payload=body.payload,
-        seq=int(time.time() * 1000),
+        seq=command_ledger.next_seq(),
         origin="operator",
     )
     target_ids = body.node_ids or await registry.active_node_ids()
-    return await _dispatch_to_nodes(command, target_ids)
+    result = await _dispatch_to_nodes(command, target_ids)
+    command_ledger.finalize_request("operator_load_show", body.request_id, result)
+    return result
 
 
 @app.post("/api/v1/operators/seek")
 async def operator_seek(body: OperatorCommandRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="operator_seek",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="SEEK",
         payload=body.payload,
-        seq=int(time.time() * 1000),
+        seq=command_ledger.next_seq(),
         origin="operator",
     )
     target_ids = body.node_ids or await registry.active_node_ids()
-    return await _dispatch_to_nodes(command, target_ids)
+    result = await _dispatch_to_nodes(command, target_ids)
+    command_ledger.finalize_request("operator_seek", body.request_id, result)
+    return result
 
 
 @app.websocket("/ws/nodes/{node_id}")
@@ -240,3 +422,30 @@ async def operator_socket(ws: WebSocket) -> None:
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         return
+
+
+def _idempotent_begin_or_raise(
+    scope: str,
+    request_id: str | None,
+    payload: dict[str, object],
+) -> dict[str, object] | None:
+    status, replay = command_ledger.begin_request(scope=scope, request_id=request_id, payload=payload)
+    if status == "REPLAY":
+        return replay
+    if status == "MISMATCH":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason_code": "REQUEST_ID_PAYLOAD_MISMATCH",
+                "message": "The same request_id was reused with a different payload.",
+            },
+        )
+    if status == "IN_PROGRESS":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason_code": "REQUEST_IN_PROGRESS",
+                "message": "A request with this request_id is currently in progress.",
+            },
+        )
+    return None

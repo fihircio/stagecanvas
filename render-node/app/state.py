@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -26,6 +27,7 @@ class NodeState:
     last_seq: int = 0
     scheduled_play_time_ms: int | None = None
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
+    command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def apply_command(
@@ -37,8 +39,18 @@ class NodeState:
     ) -> None:
         payload = payload or {}
         bridge_call: tuple[str, dict[str, Any]] | None = None
+        history = {
+            "at_ms": int(time.time() * 1000),
+            "seq": seq,
+            "command": command,
+            "status": "accepted",
+            "detail": "",
+        }
         async with self._lock:
             if seq <= self.last_seq:
+                history["status"] = "ignored"
+                history["detail"] = f"duplicate_or_old_seq(last={self.last_seq})"
+                self.command_history.append(history)
                 return
             self.last_seq = seq
 
@@ -78,19 +90,29 @@ class NodeState:
         if bridge_call is None:
             return
 
-        name, args = bridge_call
-        if name == "load_show":
-            await self.bridge.load_show(args["show_id"], args["payload"])
-        elif name == "play_at":
-            await self.bridge.play_at(args["show_id"], args["target_time_ms"], args["payload"])
-        elif name == "pause":
-            await self.bridge.pause()
-        elif name == "seek":
-            await self.bridge.seek(args["position_ms"])
-        elif name == "stop":
-            await self.bridge.stop()
-        elif name == "ping":
-            await self.bridge.ping()
+        try:
+            name, args = bridge_call
+            if name == "load_show":
+                await self.bridge.load_show(args["show_id"], args["payload"])
+            elif name == "play_at":
+                await self.bridge.play_at(args["show_id"], args["target_time_ms"], args["payload"])
+            elif name == "pause":
+                await self.bridge.pause()
+            elif name == "seek":
+                await self.bridge.seek(args["position_ms"])
+            elif name == "stop":
+                await self.bridge.stop()
+            elif name == "ping":
+                await self.bridge.ping()
+            history["detail"] = "applied"
+        except Exception as exc:
+            history["status"] = "error"
+            history["detail"] = str(exc)[:200]
+            async with self._lock:
+                self.status = "ERROR"
+        finally:
+            async with self._lock:
+                self.command_history.append(history)
 
     async def tick(self, dt_ms: int) -> None:
         now = int(time.time() * 1000)
@@ -140,4 +162,23 @@ class NodeState:
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
                 },
+            }
+
+    async def diagnostics_snapshot(self) -> dict[str, Any]:
+        async with self._lock:
+            return {
+                "node_id": self.node_id,
+                "status": self.status,
+                "show_id": self.show_id,
+                "position_ms": self.position_ms,
+                "drift_ms": self.drift_ms,
+                "last_seq": self.last_seq,
+                "scheduled_play_time_ms": self.scheduled_play_time_ms,
+                "metrics": {
+                    "cpu_pct": self.cpu_pct,
+                    "gpu_pct": self.gpu_pct,
+                    "fps": self.fps,
+                    "dropped_frames": self.dropped_frames,
+                },
+                "last_command": self.command_history[-1] if self.command_history else None,
             }

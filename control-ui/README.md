@@ -7,7 +7,12 @@ Current stack:
 
 Implemented screen:
 
-- Node dashboard (status, drift, CPU/GPU, FPS, dropped frames)
+- Control-room wireframe layout:
+  - Timeline rail (top)
+  - Media library (left)
+  - Preview window with tabs (center)
+  - Node status stack (right)
+  - Transport and quick actions (bottom)
 - Target selector (all nodes or a specific node)
 - Drift alert threshold input
 - Protocol/SLO badges from orchestration snapshots
@@ -45,3 +50,8 @@ All controls dispatch to either:
 
 - all nodes (default), or
 - selected node from the target selector.
+
+Timeline actions:
+
+- `Snap` / `Sync Refresh`: reload timeline snapshot from orchestration
+- `Set Cue`: creates/updates `triggers` track and inserts a cue clip at current playhead

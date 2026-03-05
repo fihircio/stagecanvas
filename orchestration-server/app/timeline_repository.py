@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from .models import TimelineClip, TimelineShowSummary, TimelineSnapshotResponse, TimelineTrack
+
+
+class TimelineRepository:
+    def __init__(self, db_path: Path) -> None:
+        self._db_path = db_path
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._init_db()
+        self._seed_demo_show()
+
+    def list_shows(self) -> list[TimelineShowSummary]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.show_id, s.duration_ms, COUNT(t.track_id) AS track_count
+                FROM shows s
+                LEFT JOIN tracks t ON t.show_id = s.show_id
+                GROUP BY s.show_id, s.duration_ms
+                ORDER BY s.show_id
+                """
+            ).fetchall()
+        return [
+            TimelineShowSummary(show_id=row["show_id"], duration_ms=row["duration_ms"], track_count=row["track_count"])
+            for row in rows
+        ]
+
+    def upsert_show(self, show_id: str, duration_ms: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO shows(show_id, duration_ms)
+                VALUES(?, ?)
+                ON CONFLICT(show_id) DO UPDATE SET duration_ms = excluded.duration_ms
+                """,
+                (show_id, duration_ms),
+            )
+            conn.commit()
+
+    def delete_show(self, show_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM clips WHERE show_id = ?", (show_id,))
+            conn.execute("DELETE FROM tracks WHERE show_id = ?", (show_id,))
+            deleted = conn.execute("DELETE FROM shows WHERE show_id = ?", (show_id,)).rowcount
+            conn.commit()
+        if deleted == 0:
+            raise KeyError(f"Show not found: {show_id}")
+
+    def upsert_track(self, show_id: str, track_id: str, label: str, kind: str, position: int | None) -> None:
+        with self._connect() as conn:
+            if not self._show_exists(conn, show_id):
+                raise KeyError(f"Show not found: {show_id}")
+            resolved_position = position if position is not None else self._next_track_position(conn, show_id)
+            conn.execute(
+                """
+                INSERT INTO tracks(show_id, track_id, label, kind, position)
+                VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(show_id, track_id)
+                DO UPDATE SET label = excluded.label, kind = excluded.kind, position = excluded.position
+                """,
+                (show_id, track_id, label, kind, resolved_position),
+            )
+            conn.commit()
+
+    def delete_track(self, show_id: str, track_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM clips WHERE show_id = ? AND track_id = ?", (show_id, track_id))
+            deleted = conn.execute(
+                "DELETE FROM tracks WHERE show_id = ? AND track_id = ?",
+                (show_id, track_id),
+            ).rowcount
+            conn.commit()
+        if deleted == 0:
+            raise KeyError(f"Track not found: {show_id}/{track_id}")
+
+    def upsert_clip(
+        self,
+        show_id: str,
+        track_id: str,
+        clip_id: str,
+        label: str,
+        start_ms: int,
+        duration_ms: int,
+        kind: str,
+        position: int | None,
+    ) -> None:
+        with self._connect() as conn:
+            if not self._track_exists(conn, show_id, track_id):
+                raise KeyError(f"Track not found: {show_id}/{track_id}")
+            resolved_position = position if position is not None else self._next_clip_position(conn, show_id, track_id)
+            conn.execute(
+                """
+                INSERT INTO clips(show_id, track_id, clip_id, label, start_ms, duration_ms, kind, position)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(show_id, track_id, clip_id)
+                DO UPDATE SET
+                  label = excluded.label,
+                  start_ms = excluded.start_ms,
+                  duration_ms = excluded.duration_ms,
+                  kind = excluded.kind,
+                  position = excluded.position
+                """,
+                (show_id, track_id, clip_id, label, start_ms, duration_ms, kind, resolved_position),
+            )
+            conn.commit()
+
+    def delete_clip(self, show_id: str, track_id: str, clip_id: str) -> None:
+        with self._connect() as conn:
+            deleted = conn.execute(
+                "DELETE FROM clips WHERE show_id = ? AND track_id = ? AND clip_id = ?",
+                (show_id, track_id, clip_id),
+            ).rowcount
+            conn.commit()
+        if deleted == 0:
+            raise KeyError(f"Clip not found: {show_id}/{track_id}/{clip_id}")
+
+    def snapshot(self, show_id: str, playhead_ms: int = 0) -> TimelineSnapshotResponse:
+        with self._connect() as conn:
+            show = conn.execute("SELECT show_id, duration_ms FROM shows WHERE show_id = ?", (show_id,)).fetchone()
+            if show is None:
+                raise KeyError(f"Show not found: {show_id}")
+
+            tracks_rows = conn.execute(
+                """
+                SELECT track_id, label, kind
+                FROM tracks
+                WHERE show_id = ?
+                ORDER BY position, track_id
+                """,
+                (show_id,),
+            ).fetchall()
+
+            tracks: list[TimelineTrack] = []
+            for track in tracks_rows:
+                clip_rows = conn.execute(
+                    """
+                    SELECT clip_id, label, start_ms, duration_ms, kind
+                    FROM clips
+                    WHERE show_id = ? AND track_id = ?
+                    ORDER BY position, clip_id
+                    """,
+                    (show_id, track["track_id"]),
+                ).fetchall()
+                clips = [
+                    TimelineClip(
+                        clip_id=row["clip_id"],
+                        label=row["label"],
+                        start_ms=row["start_ms"],
+                        duration_ms=row["duration_ms"],
+                        kind=row["kind"],
+                    )
+                    for row in clip_rows
+                ]
+                tracks.append(
+                    TimelineTrack(
+                        track_id=track["track_id"],
+                        label=track["label"],
+                        kind=track["kind"],
+                        clips=clips,
+                    )
+                )
+
+            duration_ms = int(show["duration_ms"])
+            return TimelineSnapshotResponse(
+                show_id=show["show_id"],
+                duration_ms=duration_ms,
+                playhead_ms=max(0, min(playhead_ms, duration_ms)),
+                tracks=tracks,
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self._db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
+    def _init_db(self) -> None:
+        with self._connect() as conn:
+            conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS shows (
+                  show_id TEXT PRIMARY KEY,
+                  duration_ms INTEGER NOT NULL CHECK(duration_ms > 0)
+                );
+
+                CREATE TABLE IF NOT EXISTS tracks (
+                  show_id TEXT NOT NULL,
+                  track_id TEXT NOT NULL,
+                  label TEXT NOT NULL,
+                  kind TEXT NOT NULL,
+                  position INTEGER NOT NULL DEFAULT 0,
+                  PRIMARY KEY(show_id, track_id),
+                  FOREIGN KEY(show_id) REFERENCES shows(show_id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS clips (
+                  show_id TEXT NOT NULL,
+                  track_id TEXT NOT NULL,
+                  clip_id TEXT NOT NULL,
+                  label TEXT NOT NULL,
+                  start_ms INTEGER NOT NULL CHECK(start_ms >= 0),
+                  duration_ms INTEGER NOT NULL CHECK(duration_ms > 0),
+                  kind TEXT NOT NULL,
+                  position INTEGER NOT NULL DEFAULT 0,
+                  PRIMARY KEY(show_id, track_id, clip_id),
+                  FOREIGN KEY(show_id, track_id) REFERENCES tracks(show_id, track_id) ON DELETE CASCADE
+                );
+                """
+            )
+            conn.commit()
+
+    def _seed_demo_show(self) -> None:
+        if self.list_shows():
+            return
+        self.upsert_show("demo-show", 60000)
+        self.upsert_track("demo-show", "video-main", "Video Main", "video", 0)
+        self.upsert_track("demo-show", "alpha-overlay", "Alpha Overlay", "alpha", 1)
+        self.upsert_track("demo-show", "audio-main", "Audio Main", "audio", 2)
+
+        self.upsert_clip("demo-show", "video-main", "v1", "Intro Wall", 0, 12000, "video", 0)
+        self.upsert_clip("demo-show", "video-main", "v2", "City Motion", 12500, 18000, "video", 1)
+        self.upsert_clip("demo-show", "video-main", "v3", "Final Burst", 32000, 22000, "video", 2)
+        self.upsert_clip("demo-show", "alpha-overlay", "a1", "Mask Sweep", 7000, 9000, "alpha", 0)
+        self.upsert_clip("demo-show", "alpha-overlay", "a2", "Logo Reveal", 35000, 10000, "alpha", 1)
+        self.upsert_clip("demo-show", "audio-main", "au1", "Sound Bed", 0, 50000, "audio", 0)
+
+    def _show_exists(self, conn: sqlite3.Connection, show_id: str) -> bool:
+        return conn.execute("SELECT 1 FROM shows WHERE show_id = ?", (show_id,)).fetchone() is not None
+
+    def _track_exists(self, conn: sqlite3.Connection, show_id: str, track_id: str) -> bool:
+        return (
+            conn.execute(
+                "SELECT 1 FROM tracks WHERE show_id = ? AND track_id = ?",
+                (show_id, track_id),
+            ).fetchone()
+            is not None
+        )
+
+    def _next_track_position(self, conn: sqlite3.Connection, show_id: str) -> int:
+        row = conn.execute("SELECT COALESCE(MAX(position), -1) AS max_pos FROM tracks WHERE show_id = ?", (show_id,)).fetchone()
+        return int(row["max_pos"]) + 1
+
+    def _next_clip_position(self, conn: sqlite3.Connection, show_id: str, track_id: str) -> int:
+        row = conn.execute(
+            """
+            SELECT COALESCE(MAX(position), -1) AS max_pos
+            FROM clips
+            WHERE show_id = ? AND track_id = ?
+            """,
+            (show_id, track_id),
+        ).fetchone()
+        return int(row["max_pos"]) + 1
+

@@ -6,3 +6,9 @@ __pycache__/
 # Node / Next
 node_modules/
 .next/
+
+# Local sanity artifacts
+.sanity-logs/
+
+# Local timeline persistence
+orchestration-server/data/

@@ -20,3 +20,10 @@ Current executable milestone:
   - node registration
   - heartbeats
   - `PLAY_AT`, `PAUSE`, `STOP` control flow
+
+Multi-agent collaboration:
+
+- `docs/MULTI_AGENT_WORKFLOW.md` for branch ownership, handoff, and merge process.
+- `docs/AGENT_SYNC_PACKET.md` for a paste-ready packet to align parallel chats.
+- `scripts/dev-sanity.sh` for shared startup sanity checks and error logs in `.sanity-logs/`.
+- `make sanity` as the standard pre-handoff check command for all agents.

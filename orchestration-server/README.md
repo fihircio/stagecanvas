@@ -28,6 +28,14 @@ uvicorn app.main:app --reload --port 8010
 - `POST /api/v1/nodes/{node_id}/heartbeat`
 - `GET /api/v1/nodes`
 - `GET /api/v1/slo`
+- `GET /api/v1/timeline/snapshot`
+- `GET /api/v1/timeline/shows`
+- `PUT /api/v1/timeline/shows/{show_id}`
+- `DELETE /api/v1/timeline/shows/{show_id}`
+- `PUT /api/v1/timeline/shows/{show_id}/tracks/{track_id}`
+- `DELETE /api/v1/timeline/shows/{show_id}/tracks/{track_id}`
+- `PUT /api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}`
+- `DELETE /api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}`
 - `POST /api/v1/commands/broadcast`
 - `POST /api/v1/nodes/{node_id}/commands`
 - `POST /api/v1/shows/play_at`
@@ -46,6 +54,10 @@ uvicorn app.main:app --reload --port 8010
 - Operator endpoints accept optional `node_ids` for targeted dispatch.
 - `PLAY_AT` enforces a minimum lead time (`1500ms` in MVP).
 - Operator WS snapshots include drift SLO summary and protocol version.
+- Timeline domain is persisted in SQLite at `orchestration-server/data/timeline.db`.
+- Operator and `play_at` endpoints accept optional `request_id` for idempotent retries.
+- Dispatch responses include `reason_code` and per-node `reason_code` details.
+- Command idempotency + sequence ledger is persisted in `orchestration-server/data/orchestration.db`.
 
 ## Mock Node (Local E2E)
 
