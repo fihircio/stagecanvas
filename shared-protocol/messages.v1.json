@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StageCanvas Messages v1",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/Heartbeat" },
+    { "$ref": "#/$defs/ControlCommand" },
+    { "$ref": "#/$defs/StateUpdate" }
+  ],
+  "$defs": {
+    "BaseMessage": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string", "const": "v1" },
+        "message_id": { "type": "string" },
+        "timestamp_ms": { "type": "integer", "minimum": 0 },
+        "node_id": { "type": "string" }
+      },
+      "required": ["version", "message_id", "timestamp_ms", "node_id"],
+      "additionalProperties": true
+    },
+    "Heartbeat": {
+      "allOf": [
+        { "$ref": "#/$defs/BaseMessage" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "HEARTBEAT" },
+            "status": { "enum": ["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"] },
+            "show_id": { "type": ["string", "null"] },
+            "position_ms": { "type": "integer", "minimum": 0 },
+            "drift_ms": { "type": "number" },
+            "metrics": {
+              "type": "object",
+              "properties": {
+                "cpu_pct": { "type": "number" },
+                "gpu_pct": { "type": "number" },
+                "fps": { "type": "number" },
+                "dropped_frames": { "type": "integer", "minimum": 0 }
+              },
+              "required": ["cpu_pct", "gpu_pct", "fps", "dropped_frames"]
+            }
+          },
+          "required": ["type", "status", "metrics", "position_ms", "drift_ms"]
+        }
+      ]
+    },
+    "ControlCommand": {
+      "allOf": [
+        { "$ref": "#/$defs/BaseMessage" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "COMMAND" },
+            "command": { "enum": ["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"] },
+            "target_time_ms": { "type": "integer", "minimum": 0 },
+            "payload": { "type": "object" },
+            "seq": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["type", "command", "seq"]
+        }
+      ]
+    },
+    "StateUpdate": {
+      "allOf": [
+        { "$ref": "#/$defs/BaseMessage" },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "STATE_UPDATE" },
+            "show_id": { "type": "string" },
+            "status": { "enum": ["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"] },
+            "position_ms": { "type": "integer", "minimum": 0 },
+            "drift_ms": { "type": "number" },
+            "drift_level": { "enum": ["OK", "WARN", "CRITICAL"] }
+          },
+          "required": ["type", "show_id", "status", "position_ms", "drift_ms", "drift_level"]
+        }
+      ]
+    }
+  }
+}
