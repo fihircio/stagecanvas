@@ -37,6 +37,20 @@ Periodic diagnostics logs (useful while debugging reconnection/command handling)
 stagecanvas-render-node --node-id render-node-1 --label "Render Node 1" --log-state-every-sec 2
 ```
 
+Bounded smoke run (auto-stop):
+
+```bash
+stagecanvas-render-node --node-id render-node-1 --max-runtime-sec 20 --log-state-every-sec 2
+```
+
+Runtime tuning flags:
+
+- `--heartbeat-interval-sec` (default `1.0`)
+- `--tick-interval-sec` (default `0.2`)
+- `--ws-reconnect-initial-sec` (default `1.0`)
+- `--ws-reconnect-max-sec` (default `8.0`)
+- `--max-runtime-sec` (default `0`, disabled)
+
 ## Run Two Nodes (sync test)
 
 Terminal A:
@@ -64,3 +78,4 @@ python -m unittest discover -s render-node/tests -p 'test_*.py'
 - This agent is the control/runtime layer for the future Unity renderer integration.
 - Unity output/mapping can now plug into `app/bridge.py` without changing orchestration protocol flow.
 - Agent retries node registration with backoff and keeps connection/error diagnostics internally.
+- Diagnostics output includes heartbeat/command counters and command history stats.

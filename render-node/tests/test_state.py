@@ -18,6 +18,8 @@ class NodeStateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot["status"], "READY")
         self.assertIsNotNone(snapshot["last_command"])
         self.assertEqual(snapshot["last_command"]["status"], "ignored")
+        self.assertEqual(snapshot["command_history_size"], 2)
+        self.assertEqual(snapshot["command_history_limit"], 50)
 
     async def test_play_at_transitions_to_playing_on_tick(self) -> None:
         state = NodeState(node_id="n2", label="Node 2")
@@ -48,6 +50,7 @@ class NodeStateTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(snapshot["last_command"])
         self.assertEqual(snapshot["last_command"]["command"], "SEEK")
         self.assertEqual(snapshot["last_command"]["status"], "accepted")
+        self.assertGreaterEqual(snapshot["command_history_size"], 1)
 
 
 if __name__ == "__main__":

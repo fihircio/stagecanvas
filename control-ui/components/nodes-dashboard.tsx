@@ -20,6 +20,7 @@ type CommandResult = {
   status: "ok" | "error";
   detail: string;
   atIso: string;
+  requestId: string;
 };
 
 function statusClass(status: string): string {

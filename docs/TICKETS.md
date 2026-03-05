@@ -134,3 +134,148 @@ Checks:
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
+
+## SC-012 Render Node Bridge Integration Tests
+
+Ticket: SC-012
+Scope: verify bridge call sequencing and error propagation in render-node state machine.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/tests/test_state_bridge.py`
+Out of scope:
+- orchestration server runtime files
+Acceptance:
+- [x] bridge call order assertions for command flow
+- [x] bridge failure path marks node as `ERROR`
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-013 Render Node WS Command Guard
+
+Ticket: SC-013
+Scope: ignore unsupported websocket commands without crashing apply path.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/tests/test_agent.py`
+Out of scope:
+- protocol schema changes
+Acceptance:
+- [x] unsupported commands are ignored and tracked
+- [x] valid commands still flow to state machine
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-014 Render Node Runtime Tuning Flags
+
+Ticket: SC-014
+Scope: expose interval tuning flags for heartbeat/tick loops.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/README.md`
+Out of scope:
+- orchestration server behavior
+Acceptance:
+- [x] heartbeat interval configurable
+- [x] playback tick interval configurable
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-015 Render Node WS Reconnect Backoff
+
+Ticket: SC-015
+Scope: improve websocket reconnect from fixed delay to bounded exponential backoff.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+Out of scope:
+- websocket protocol payload changes
+Acceptance:
+- [x] reconnect delay grows and caps by config
+- [x] reconnect delay resets after successful connect
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-016 Render Node Bounded Runtime Mode
+
+Ticket: SC-016
+Scope: add optional auto-stop runtime budget for smoke runs.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/README.md`
+Out of scope:
+- service orchestration lifecycle changes
+Acceptance:
+- [x] `--max-runtime-sec` cleanly stops loops
+- [x] cleanup still closes http client and bridge
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-017 Render Node Diagnostics Counters
+
+Ticket: SC-017
+Scope: include transport/command counters in periodic diagnostics output.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/README.md`
+Out of scope:
+- protocol schema changes
+Acceptance:
+- [x] heartbeat ok/error counters included
+- [x] command received/ignored counters included
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-018 Render Node Diagnostics Snapshot Enrichment
+
+Ticket: SC-018
+Scope: include command history size metadata in diagnostics snapshots.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/state.py`
+- `render-node/tests/test_state.py`
+Out of scope:
+- command schema changes
+Acceptance:
+- [x] `command_history_size` present
+- [x] `command_history_limit` present
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-019 Render Node Reliability Test Suite Expansion
+
+Ticket: SC-019
+Scope: extend test coverage for agent/runtime guards and state+bridge interactions.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/tests/test_agent.py`
+- `render-node/tests/test_state_bridge.py`
+- `render-node/README.md`
+Out of scope:
+- orchestration server runtime files
+Acceptance:
+- [x] agent constructor guardrail tests
+- [x] unsupported command guard test
+- [x] bridge integration + failure tests
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
