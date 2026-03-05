@@ -52,6 +52,18 @@ class NodeStateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot["last_command"]["status"], "accepted")
         self.assertGreaterEqual(snapshot["command_history_size"], 1)
 
+    async def test_command_history_is_capped(self) -> None:
+        state = NodeState(node_id="n4", label="Node 4")
+
+        for seq in range(1, 61):
+            await state.apply_command("PING", seq=seq, payload={}, target_time_ms=None)
+
+        snapshot = await state.diagnostics_snapshot()
+        self.assertEqual(snapshot["command_history_limit"], 50)
+        self.assertEqual(snapshot["command_history_size"], 50)
+        self.assertEqual(snapshot["last_seq"], 60)
+        self.assertEqual(snapshot["last_command"]["seq"], 60)
+
 
 if __name__ == "__main__":
     unittest.main()

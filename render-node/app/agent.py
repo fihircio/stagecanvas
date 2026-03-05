@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import time
+from pathlib import Path
 from typing import Any, cast
 
 import httpx
@@ -29,6 +30,7 @@ class RenderNodeAgent:
         ws_reconnect_initial_sec: float = 1.0,
         ws_reconnect_max_sec: float = 8.0,
         max_runtime_sec: float = 0.0,
+        diagnostics_file: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.node_id = node_id
@@ -40,6 +42,7 @@ class RenderNodeAgent:
         self.ws_reconnect_initial_sec = max(0.1, ws_reconnect_initial_sec)
         self.ws_reconnect_max_sec = max(self.ws_reconnect_initial_sec, ws_reconnect_max_sec)
         self.max_runtime_sec = max(0.0, max_runtime_sec)
+        self.diagnostics_file = diagnostics_file
         self.bridge = bridge or NullRendererBridge()
         self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge)
         self._client = httpx.AsyncClient(timeout=5.0)
@@ -50,8 +53,10 @@ class RenderNodeAgent:
         self._last_ws_error: str | None = None
         self._heartbeat_ok_count = 0
         self._heartbeat_error_count = 0
+        self._heartbeat_consecutive_error_count = 0
         self._command_received_count = 0
         self._command_ignored_count = 0
+        self._ws_reconnect_attempts = 0
 
     async def _sleep_or_stop(self, seconds: float) -> bool:
         try:
@@ -95,9 +100,11 @@ class RenderNodeAgent:
                 resp.raise_for_status()
                 self._last_heartbeat_error = None
                 self._heartbeat_ok_count += 1
+                self._heartbeat_consecutive_error_count = 0
             except Exception as exc:
                 self._last_heartbeat_error = str(exc)
                 self._heartbeat_error_count += 1
+                self._heartbeat_consecutive_error_count += 1
             if await self._sleep_or_stop(self.heartbeat_interval_sec):
                 return
 
@@ -120,15 +127,22 @@ class RenderNodeAgent:
                     self._ws_connected = True
                     self._last_ws_error = None
                     wait_sec = self.ws_reconnect_initial_sec
+                    self._ws_reconnect_attempts = 0
                     async for raw in ws:
                         if self._stop_event.is_set():
                             return
-                        msg = json.loads(raw)
+                        try:
+                            msg = json.loads(raw)
+                        except json.JSONDecodeError:
+                            self._command_ignored_count += 1
+                            self._last_ws_error = "invalid_json_frame"
+                            continue
                         await self.process_ws_message(msg)
             except Exception as exc:
                 self._last_ws_error = str(exc)
             finally:
                 self._ws_connected = False
+                self._ws_reconnect_attempts += 1
                 if await self._sleep_or_stop(wait_sec):
                     return
                 wait_sec = min(self.ws_reconnect_max_sec, wait_sec * 2.0)
@@ -141,13 +155,40 @@ class RenderNodeAgent:
             self._command_ignored_count += 1
             self._last_ws_error = f"unsupported_command:{command or 'EMPTY'}"
             return
+
+        raw_seq = msg.get("seq", 0)
+        try:
+            seq = int(raw_seq)
+        except (TypeError, ValueError):
+            self._command_ignored_count += 1
+            self._last_ws_error = "invalid_command_seq"
+            return
+        if seq < 0:
+            self._command_ignored_count += 1
+            self._last_ws_error = "negative_command_seq"
+            return
+
         self._command_received_count += 1
         await self.state.apply_command(
             command=cast(CommandType, command),
-            seq=int(msg.get("seq", 0)),
+            seq=seq,
             payload=cast(dict[str, Any] | None, msg.get("payload")),
             target_time_ms=cast(int | None, msg.get("target_time_ms")),
         )
+
+    async def diagnostics_snapshot(self) -> dict[str, Any]:
+        snapshot = await self.state.diagnostics_snapshot()
+        snapshot["ws_connected"] = self._ws_connected
+        snapshot["last_register_error"] = self._last_register_error
+        snapshot["last_heartbeat_error"] = self._last_heartbeat_error
+        snapshot["last_ws_error"] = self._last_ws_error
+        snapshot["heartbeat_ok_count"] = self._heartbeat_ok_count
+        snapshot["heartbeat_error_count"] = self._heartbeat_error_count
+        snapshot["heartbeat_consecutive_error_count"] = self._heartbeat_consecutive_error_count
+        snapshot["command_received_count"] = self._command_received_count
+        snapshot["command_ignored_count"] = self._command_ignored_count
+        snapshot["ws_reconnect_attempts"] = self._ws_reconnect_attempts
+        return snapshot
 
     async def diagnostics_loop(self) -> None:
         if self.log_state_every_sec <= 0:
@@ -155,16 +196,14 @@ class RenderNodeAgent:
                 await self._sleep_or_stop(3600)
             return
         while not self._stop_event.is_set():
-            snapshot = await self.state.diagnostics_snapshot()
-            snapshot["ws_connected"] = self._ws_connected
-            snapshot["last_register_error"] = self._last_register_error
-            snapshot["last_heartbeat_error"] = self._last_heartbeat_error
-            snapshot["last_ws_error"] = self._last_ws_error
-            snapshot["heartbeat_ok_count"] = self._heartbeat_ok_count
-            snapshot["heartbeat_error_count"] = self._heartbeat_error_count
-            snapshot["command_received_count"] = self._command_received_count
-            snapshot["command_ignored_count"] = self._command_ignored_count
-            print(f"[render-node] {json.dumps(snapshot, separators=(',', ':'))}")
+            snapshot = await self.diagnostics_snapshot()
+            line = json.dumps(snapshot, separators=(",", ":"))
+            print(f"[render-node] {line}")
+            if self.diagnostics_file:
+                path = Path(self.diagnostics_file)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a", encoding="utf-8") as fh:
+                    fh.write(f"{line}\n")
             if await self._sleep_or_stop(self.log_state_every_sec):
                 return
 
@@ -221,6 +260,11 @@ async def main() -> None:
         default=0.0,
         help="Optional auto-stop runtime budget for smoke tests; 0 runs until interrupted.",
     )
+    parser.add_argument(
+        "--diagnostics-file",
+        default=None,
+        help="Optional path to append diagnostics JSONL snapshots.",
+    )
     args = parser.parse_args()
 
     bridge: RendererBridge
@@ -241,6 +285,7 @@ async def main() -> None:
         ws_reconnect_initial_sec=args.ws_reconnect_initial_sec,
         ws_reconnect_max_sec=args.ws_reconnect_max_sec,
         max_runtime_sec=args.max_runtime_sec,
+        diagnostics_file=args.diagnostics_file,
     )
     try:
         await agent.run()

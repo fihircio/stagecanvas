@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from app.agent import RenderNodeAgent
 from app.bridge import NullRendererBridge
@@ -40,6 +43,72 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
         snapshot = await self.agent.state.diagnostics_snapshot()
         self.assertEqual(snapshot["last_seq"], 0)
         self.assertIn("unsupported_command", self.agent._last_ws_error or "")
+
+    async def test_process_ws_message_ignores_invalid_seq(self) -> None:
+        self.agent = RenderNodeAgent(
+            base_url="http://localhost:8010",
+            node_id="n3",
+            label="Node",
+            bridge=NullRendererBridge(),
+        )
+        await self.agent.process_ws_message({"type": "COMMAND", "command": "PING", "seq": "abc"})
+        await self.agent.process_ws_message({"type": "COMMAND", "command": "PING", "seq": -1})
+
+        snapshot = await self.agent.state.diagnostics_snapshot()
+        self.assertEqual(snapshot["last_seq"], 0)
+        self.assertGreaterEqual(self.agent._command_ignored_count, 2)
+        self.assertIn("command_seq", self.agent._last_ws_error or "")
+
+    async def test_process_ws_message_applies_valid_command(self) -> None:
+        self.agent = RenderNodeAgent(
+            base_url="http://localhost:8010",
+            node_id="n4",
+            label="Node",
+            bridge=NullRendererBridge(),
+        )
+        await self.agent.process_ws_message({"type": "COMMAND", "command": "SEEK", "seq": 4, "payload": {"position_ms": 333}})
+
+        snapshot = await self.agent.state.diagnostics_snapshot()
+        self.assertEqual(snapshot["last_seq"], 4)
+        self.assertEqual(snapshot["position_ms"], 333)
+        self.assertEqual(self.agent._command_received_count, 1)
+
+    async def test_agent_diagnostics_snapshot_exposes_counters(self) -> None:
+        self.agent = RenderNodeAgent(
+            base_url="http://localhost:8010",
+            node_id="n5",
+            label="Node",
+            bridge=NullRendererBridge(),
+        )
+        await self.agent.process_ws_message({"type": "COMMAND", "command": "PING", "seq": 1})
+        snapshot = await self.agent.diagnostics_snapshot()
+
+        self.assertIn("heartbeat_ok_count", snapshot)
+        self.assertIn("heartbeat_error_count", snapshot)
+        self.assertIn("heartbeat_consecutive_error_count", snapshot)
+        self.assertIn("ws_reconnect_attempts", snapshot)
+        self.assertEqual(snapshot["command_received_count"], 1)
+
+    async def test_diagnostics_loop_writes_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics_path = f"{tmp}/diag.jsonl"
+            self.agent = RenderNodeAgent(
+                base_url="http://localhost:8010",
+                node_id="n6",
+                label="Node",
+                bridge=NullRendererBridge(),
+                log_state_every_sec=0.01,
+                diagnostics_file=diagnostics_path,
+            )
+            with patch("builtins.print"):
+                task = asyncio.create_task(self.agent.diagnostics_loop())
+                await asyncio.sleep(0.03)
+                await self.agent.close()
+                await task
+
+            with open(diagnostics_path, "r", encoding="utf-8") as fh:
+                lines = [line.strip() for line in fh.readlines() if line.strip()]
+            self.assertGreaterEqual(len(lines), 1)
 
 
 if __name__ == "__main__":

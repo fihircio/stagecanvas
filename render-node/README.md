@@ -50,6 +50,7 @@ Runtime tuning flags:
 - `--ws-reconnect-initial-sec` (default `1.0`)
 - `--ws-reconnect-max-sec` (default `8.0`)
 - `--max-runtime-sec` (default `0`, disabled)
+- `--diagnostics-file` (optional path; appends JSONL diagnostics snapshots)
 
 ## Run Two Nodes (sync test)
 
@@ -73,9 +74,17 @@ Then use the control UI `PLAY_AT (+3s)` action to verify both nodes enter `PLAYI
 python -m unittest discover -s render-node/tests -p 'test_*.py'
 ```
 
+From repo root:
+
+```bash
+make render-test
+make render-compile
+```
+
 ## Notes
 
 - This agent is the control/runtime layer for the future Unity renderer integration.
 - Unity output/mapping can now plug into `app/bridge.py` without changing orchestration protocol flow.
 - Agent retries node registration with backoff and keeps connection/error diagnostics internally.
-- Diagnostics output includes heartbeat/command counters and command history stats.
+- Agent ignores malformed WS JSON frames and unsupported/invalid commands without crashing loops.
+- Diagnostics output includes heartbeat counters, reconnect attempts, and command history stats.
