@@ -180,5 +180,7 @@ class NodeState:
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
                 },
+                "command_history_size": len(self.command_history),
+                "command_history_limit": self.command_history.maxlen,
                 "last_command": self.command_history[-1] if self.command_history else None,
             }
