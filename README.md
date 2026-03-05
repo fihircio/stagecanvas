@@ -27,3 +27,4 @@ Multi-agent collaboration:
 - `docs/AGENT_SYNC_PACKET.md` for a paste-ready packet to align parallel chats.
 - `scripts/dev-sanity.sh` for shared startup sanity checks and error logs in `.sanity-logs/`.
 - `make sanity` as the standard pre-handoff check command for all agents.
+- `make check` for full local validation (orchestration + render-node tests, UI lint/build).

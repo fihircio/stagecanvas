@@ -92,6 +92,97 @@ Checks:
 Deliverable:
 - [x] branch + handoff note
 
+## SC-005 Orchestration Idempotency Integration Tests
+
+Ticket: SC-005
+Scope: verify persistent idempotency/replay and sequence monotonicity via API-level tests.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/tests/test_idempotency_integration.py`
+Out of scope:
+- protocol schema changes
+Acceptance:
+- [x] duplicate `request_id` returns replay marker without redispatch
+- [x] payload mismatch for same `request_id` returns `REQUEST_ID_PAYLOAD_MISMATCH`
+- [x] monotonic sequence remains increasing after ledger re-open
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-006 UI Request-ID Propagation + Result Reason Codes
+
+Ticket: SC-006
+Scope: ensure operator UI emits `request_id` and surfaces actionable command outcomes.
+Owner: lead-agent (this chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+Out of scope:
+- orchestration API contract changes
+Acceptance:
+- [x] command POSTs include `request_id`
+- [x] UI displays request id and server reason/error detail for last command
+- [x] no regression in existing control actions
+Checks:
+- [x] `cd control-ui && npm run lint && npm run build`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-007 Timeline Repository Reliability Tests
+
+Ticket: SC-007
+Scope: add deterministic tests for timeline track/clip ordering, cascade delete, and persistence.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/tests/test_timeline_repository.py`
+Out of scope:
+- UI layout changes
+Acceptance:
+- [x] track and clip ordering assertions
+- [x] show delete cascades dependent rows
+- [x] data survives repository re-open with same DB path
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-008 Operator API Contract Tests
+
+Ticket: SC-008
+Scope: enforce actionable reason-code behavior for operator-facing orchestration endpoints.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/tests/test_operator_contracts.py`
+Out of scope:
+- render-node runtime changes
+Acceptance:
+- [x] short-lead `PLAY_AT` returns `PLAY_AT_LEAD_TIME_TOO_SHORT`
+- [x] no-target broadcast returns `NO_TARGETS`
+- [x] replay response includes `DUPLICATE_REQUEST`
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-009 Unified Local Quality Gate
+
+Ticket: SC-009
+Scope: provide one command for full local validation across services.
+Owner: lead-agent (this chat)
+Files allowed:
+- `Makefile`
+- `README.md`
+Out of scope:
+- feature behavior changes
+Acceptance:
+- [x] `make check` runs orchestration tests, render-node tests, and UI lint/build
+- [x] root docs mention `make check`
+Checks:
+- [x] `make check`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
 ## SC-010 Render Node Diagnostics + Resilience
 
 Ticket: SC-010
@@ -276,6 +367,161 @@ Acceptance:
 - [x] bridge integration + failure tests
 Checks:
 - [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-020 Render Node Unified Diagnostics Snapshot
+
+Ticket: SC-020
+Scope: centralize agent-level diagnostics snapshot generation.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+Acceptance:
+- [x] `diagnostics_snapshot()` method added and used by diagnostics loop
+- [x] includes agent + state metrics in one payload
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-021 Diagnostics File Output
+
+Ticket: SC-021
+Scope: support writing diagnostics snapshots to a local JSONL file.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/README.md`
+Acceptance:
+- [x] `--diagnostics-file` CLI flag added
+- [x] diagnostics loop appends snapshots to file
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-022 Heartbeat Consecutive Failure Counter
+
+Ticket: SC-022
+Scope: expose consecutive heartbeat failure count in diagnostics.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+Acceptance:
+- [x] counter increments on failures and resets on success
+- [x] value present in diagnostics payload
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-023 WS Reconnect Attempt Counter
+
+Ticket: SC-023
+Scope: track reconnect attempts for websocket command channel.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+Acceptance:
+- [x] reconnect attempts tracked and exported in diagnostics
+- [x] counter reset on successful reconnect
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-024 Command Sequence Validation Guard
+
+Ticket: SC-024
+Scope: validate ws command `seq` before applying to state.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/tests/test_agent.py`
+Acceptance:
+- [x] non-integer and negative seq values are ignored safely
+- [x] ignored counters and errors are updated
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-025 Malformed WS Frame Tolerance
+
+Ticket: SC-025
+Scope: keep ws loop alive when malformed JSON frames are received.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+Acceptance:
+- [x] invalid JSON frame is ignored and tracked
+- [x] loop continues without crashing
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-026 Agent Command Processing Tests
+
+Ticket: SC-026
+Scope: expand agent tests for command guard and valid command behavior.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/tests/test_agent.py`
+Acceptance:
+- [x] valid command path covered
+- [x] invalid seq path covered
+- [x] unsupported command path covered
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-027 Diagnostics Snapshot Contract Tests
+
+Ticket: SC-027
+Scope: ensure diagnostics snapshot exposes expected counters.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/tests/test_agent.py`
+Acceptance:
+- [x] snapshot contains heartbeat/reconnect/command counters
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-028 Command History Cap Coverage
+
+Ticket: SC-028
+Scope: verify command history cap behavior remains intact.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/tests/test_state.py`
+Acceptance:
+- [x] history remains capped at configured limit
+- [x] newest command retained after overflow
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-029 Root Test Entrypoints
+
+Ticket: SC-029
+Scope: add root-level Make targets for render-node compile/test flows.
+Owner: lead-agent (this chat)
+Files allowed:
+- `Makefile`
+- `render-node/README.md`
+Acceptance:
+- [x] `make render-test` added
+- [x] `make render-compile` added
+Checks:
+- [x] `make render-test`
+- [x] `make render-compile`
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note

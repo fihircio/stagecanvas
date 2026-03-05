@@ -63,24 +63,40 @@ export function NodesDashboard() {
     return process.env.NEXT_PUBLIC_ORCHESTRATION_HTTP ?? "http://localhost:8010";
   }, []);
 
-  async function postJson(path: string, body: object, command: string) {
+  function makeRequestId(command: string): string {
+    const suffix =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${command.toLowerCase()}-${suffix}`;
+  }
+
+  async function postJson(path: string, body: Record<string, unknown>, command: string) {
     setActionState("sending");
+    const requestId = makeRequestId(command);
     try {
       const res = await fetch(`${apiUrl}${path}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, request_id: requestId }),
       });
+      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}`);
+        const detail = (payload.detail ?? payload) as Record<string, unknown>;
+        const reason = typeof detail.reason_code === "string" ? detail.reason_code : "UNKNOWN_ERROR";
+        const message = typeof detail.message === "string" ? detail.message : JSON.stringify(detail).slice(0, 160);
+        throw new Error(`HTTP ${res.status}: ${reason} - ${message}`);
       }
+
+      const reason = typeof payload.reason_code === "string" ? payload.reason_code : "OK";
+      const replay = payload.idempotent_replay === true ? " replay=true" : "";
       setActionState("ok");
       setLastCommand({
         command,
         status: "ok",
-        detail: `Accepted (${res.status})`,
+        detail: `Accepted (${res.status}) ${reason}${replay}`,
         atIso: new Date().toISOString(),
+        requestId,
       });
       setTimeout(() => setActionState("idle"), 1200);
     } catch (error) {
@@ -91,6 +107,7 @@ export function NodesDashboard() {
         status: "error",
         detail,
         atIso: new Date().toISOString(),
+        requestId,
       });
       setTimeout(() => setActionState("idle"), 1200);
     }
@@ -445,7 +462,7 @@ export function NodesDashboard() {
           </span>
           <span className={`command-result ${lastCommand?.status === "error" ? "command-error" : "command-ok"}`}>
             {lastCommand
-              ? `${lastCommand.command} ${lastCommand.status.toUpperCase()} • ${new Date(lastCommand.atIso).toLocaleTimeString()} • ${lastCommand.detail}`
+              ? `${lastCommand.command} ${lastCommand.status.toUpperCase()} • ${new Date(lastCommand.atIso).toLocaleTimeString()} • ${lastCommand.requestId} • ${lastCommand.detail}`
               : "No command sent yet"}
           </span>
         </div>
