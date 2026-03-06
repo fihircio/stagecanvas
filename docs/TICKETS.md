@@ -593,3 +593,108 @@ Checks:
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
+
+## SC-033 Drift Classification in Runtime
+
+Ticket: SC-033
+Scope: enforce per-node `drift_ms -> OK/WARN/CRITICAL` classification in orchestration snapshots per determinism spec.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_drift_classification.py`
+Out of scope:
+- protocol/schema version changes
+Acceptance:
+- [x] classification boundaries match `docs/DETERMINISM.md` (`<2 OK`, `>=2 WARN`, `>=8 CRITICAL`)
+- [x] snapshot node views expose classified `drift_level`
+- [x] SLO aggregate counts align with per-node classification
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-034 Operator Drift Alerting UI
+
+Ticket: SC-034
+Scope: surface drift level counts and per-node alert badges in control UI (WATCHNET-like observability).
+Owner: lead-agent (this chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/app/globals.css`
+Out of scope:
+- command dispatch behavior changes
+Acceptance:
+- [x] visible drift level counts (`OK/WARN/CRITICAL`) in node status panel
+- [x] per-node drift level badge with distinct visual severity
+- [x] node card alert styling triggers on non-OK drift level
+Checks:
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-035 Two-Node Sync Proof Test
+
+Ticket: SC-035
+Scope: add deterministic integration proof that two nodes execute `PLAY_AT` under drift SLO.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/tests/test_two_node_sync_proof.py`
+Out of scope:
+- protocol/schema version changes
+Acceptance:
+- [x] test verifies both nodes receive identical `PLAY_AT` `target_time_ms` and sequence
+- [x] test verifies both nodes report `PLAYING` drift within `OK` threshold (`< warn_ms`)
+- [x] test ties directly to MVP acceptance in `docs/ARCHITECTURE.md`
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-036 Media Preload + Local Cache Contract (MVP Stub)
+
+Ticket: SC-036
+Scope: define additive orchestration->node preload flow and node cache state reporting.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_preload_contract.py`
+- `render-node/app/state.py`
+- `render-node/tests/test_state.py`
+- docs tied to these files
+Out of scope:
+- breaking changes to existing command protocol
+Acceptance:
+- [x] `POST /api/v1/shows/preload` endpoint added
+- [x] preload dispatch uses additive payload contract (`LOAD_SHOW` + `preload_only`)
+- [x] heartbeat and node snapshot include optional cache contract fields
+- [x] render-node state updates cache contract on preload command
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-037 Reconnect Replay Reliability
+
+Ticket: SC-037
+Scope: prove offline queued command replay behavior across disconnect/reconnect cycles.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/tests/test_reconnect_replay_reliability.py`
+Out of scope:
+- websocket schema changes
+Acceptance:
+- [x] offline command is queued and replayed on first reconnect
+- [x] reconnect without new commands does not replay old command again
+- [x] command ordering remains monotonic across reconnect cycles
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note

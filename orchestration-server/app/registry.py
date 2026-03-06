@@ -36,6 +36,17 @@ class NodeRecord:
     connected: bool = False
     command_seq: int = 0
     pending_commands: list[dict[str, Any]] = field(default_factory=list)
+    cache: dict[str, Any] = field(
+        default_factory=lambda: {
+            "show_id": None,
+            "preload_state": "IDLE",
+            "asset_total": 0,
+            "cached_assets": 0,
+            "bytes_total": 0,
+            "bytes_cached": 0,
+            "last_preload_request_id": None,
+        }
+    )
     ws: WebSocket | None = None
 
 
@@ -71,8 +82,10 @@ class NodeRegistry:
             record.metrics = hb.metrics.model_dump()
             record.position_ms = hb.position_ms
             record.drift_ms = hb.drift_ms
-            record.drift_level = self._drift_level(record.drift_ms)
+            record.drift_level = self.classify_drift_level(record.drift_ms)
             record.show_id = hb.show_id
+            if hb.cache is not None:
+                record.cache = hb.cache.model_dump()
             record.last_seen_ms = int(time.time() * 1000)
             return record
 
@@ -151,9 +164,10 @@ class NodeRegistry:
             max_abs_drift_ms = 0.0
             for record in self._nodes.values():
                 max_abs_drift_ms = max(max_abs_drift_ms, abs(record.drift_ms))
-                if record.drift_level == "CRITICAL":
+                drift_level = self.classify_drift_level(record.drift_ms)
+                if drift_level == "CRITICAL":
                     critical += 1
-                elif record.drift_level == "WARN":
+                elif drift_level == "WARN":
                     warn += 1
                 else:
                     ok += 1
@@ -167,6 +181,7 @@ class NodeRegistry:
             }
 
     def _public_node_view(self, record: NodeRecord) -> dict[str, Any]:
+        drift_level = self.classify_drift_level(record.drift_ms)
         return {
             "node_id": record.node_id,
             "label": record.label,
@@ -176,15 +191,17 @@ class NodeRegistry:
             "show_id": record.show_id,
             "position_ms": record.position_ms,
             "drift_ms": record.drift_ms,
-            "drift_level": record.drift_level,
+            "drift_level": drift_level,
             "metrics": record.metrics,
             "last_seen_ms": record.last_seen_ms,
             "capabilities": record.capabilities,
             "command_seq": record.command_seq,
             "pending_commands": len(record.pending_commands),
+            "cache": record.cache,
         }
 
-    def _drift_level(self, drift_ms: float) -> DriftLevel:
+    @staticmethod
+    def classify_drift_level(drift_ms: float) -> DriftLevel:
         abs_drift = abs(drift_ms)
         if abs_drift >= DRIFT_CRITICAL_MS:
             return "CRITICAL"

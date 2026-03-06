@@ -127,6 +127,15 @@ export function NodesDashboard() {
 
   const driftThreshold = parsedDriftThreshold();
   const driftAlertCount = nodes.filter((n) => Math.abs(n.drift_ms) > driftThreshold).length;
+  const driftLevelCounts = nodes.reduce(
+    (acc, node) => {
+      if (node.drift_level === "CRITICAL") acc.critical += 1;
+      else if (node.drift_level === "WARN") acc.warn += 1;
+      else acc.ok += 1;
+      return acc;
+    },
+    { ok: 0, warn: 0, critical: 0 },
+  );
   const activePreviewNode =
     previewTab === "combined" ? null : nodes.find((n) => n.node_id === previewTab) ?? null;
   const globalPositionMs = activePreviewNode
@@ -411,9 +420,16 @@ export function NodesDashboard() {
 
         <aside className="node-panel">
           <div className="section-title">Node Status</div>
+          <div className="drift-overview">
+            <span className="drift-count drift-count-ok">OK {serverDriftSlo?.ok ?? driftLevelCounts.ok}</span>
+            <span className="drift-count drift-count-warn">WARN {serverDriftSlo?.warn ?? driftLevelCounts.warn}</span>
+            <span className="drift-count drift-count-critical">
+              CRITICAL {serverDriftSlo?.critical ?? driftLevelCounts.critical}
+            </span>
+          </div>
           <div className="status-stack">
             {nodes.map((node) => {
-              const driftAlert = Math.abs(node.drift_ms) > driftThreshold;
+              const driftAlert = node.drift_level !== "OK";
               return (
                 <article className={`node-card ${driftAlert ? "card-alert" : ""}`} key={node.node_id}>
                   <div className="node-title">
@@ -427,7 +443,7 @@ export function NodesDashboard() {
                     <span>Latency {number(node.drift_ms)}ms</span>
                   </div>
                   <div className="node-actions">
-                    {driftAlert ? <span className="alert-pill">DRIFT ALERT</span> : <span className="muted">Sync OK</span>}
+                    <span className={`drift-pill drift-${node.drift_level.toLowerCase()}`}>{node.drift_level}</span>
                   </div>
                 </article>
               );

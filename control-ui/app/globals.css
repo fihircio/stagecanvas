@@ -239,6 +239,41 @@ body {
   gap: 10px;
 }
 
+.drift-overview {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.drift-count {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.drift-count-ok {
+  color: #065f46;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.drift-count-warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.drift-count-critical {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
 .node-card {
   border: 1px solid var(--line);
   background: #fff;
@@ -441,6 +476,34 @@ body {
   color: #ef4444;
   border: 1px solid rgba(239, 68, 68, 0.5);
   background: rgba(239, 68, 68, 0.12);
+}
+
+.drift-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.drift-ok {
+  color: #065f46;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.drift-warn {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.drift-critical {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
 .empty-card {
