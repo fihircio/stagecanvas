@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from app.agent import RenderNodeAgent
@@ -30,6 +32,7 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(self.agent.tick_interval_sec, 0.05)
         self.assertGreaterEqual(self.agent.ws_reconnect_initial_sec, 0.1)
         self.assertGreaterEqual(self.agent.ws_reconnect_max_sec, self.agent.ws_reconnect_initial_sec)
+        self.assertEqual(self.agent.diagnostics_sample_every, 1)
 
     async def test_process_ws_message_ignores_unknown_command(self) -> None:
         self.agent = RenderNodeAgent(
@@ -87,6 +90,9 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("heartbeat_error_count", snapshot)
         self.assertIn("heartbeat_consecutive_error_count", snapshot)
         self.assertIn("ws_reconnect_attempts", snapshot)
+        self.assertIn("diagnostics_sample_every", snapshot)
+        self.assertIn("diagnostics_emitted_count", snapshot)
+        self.assertIn("diagnostics_skipped_count", snapshot)
         self.assertEqual(snapshot["command_received_count"], 1)
 
     async def test_diagnostics_loop_writes_file(self) -> None:
@@ -109,6 +115,36 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
             with open(diagnostics_path, "r", encoding="utf-8") as fh:
                 lines = [line.strip() for line in fh.readlines() if line.strip()]
             self.assertGreaterEqual(len(lines), 1)
+
+    async def test_should_emit_diagnostics_sampling(self) -> None:
+        self.agent = RenderNodeAgent(
+            base_url="http://localhost:8010",
+            node_id="n7",
+            label="Node",
+            bridge=NullRendererBridge(),
+            diagnostics_sample_every=3,
+        )
+        self.assertFalse(self.agent._should_emit_diagnostics(1))
+        self.assertFalse(self.agent._should_emit_diagnostics(2))
+        self.assertTrue(self.agent._should_emit_diagnostics(3))
+        self.assertTrue(self.agent._should_emit_diagnostics(6))
+
+    async def test_log_routing_stdout_vs_stderr(self) -> None:
+        self.agent = RenderNodeAgent(
+            base_url="http://localhost:8010",
+            node_id="n8",
+            label="Node",
+            bridge=NullRendererBridge(),
+        )
+        out = io.StringIO()
+        err = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            self.agent._log("info", "hello")
+            self.agent._log("warn", "oops")
+            self.agent._log("error", "boom")
+        self.assertIn("[render-node/info] hello", out.getvalue())
+        self.assertIn("[render-node/warn] oops", err.getvalue())
+        self.assertIn("[render-node/error] boom", err.getvalue())
 
 
 if __name__ == "__main__":
