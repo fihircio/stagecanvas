@@ -1,4 +1,4 @@
-.PHONY: sanity sanity-alt check render-test render-compile
+.PHONY: sanity sanity-alt check render-test render-compile render-smoke
 
 sanity:
 	./scripts/dev-sanity.sh
@@ -17,3 +17,6 @@ render-test:
 
 render-compile:
 	python -m compileall render-node/app
+
+render-smoke:
+	./scripts/render-smoke.sh
