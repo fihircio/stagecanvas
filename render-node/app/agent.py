@@ -5,6 +5,7 @@ import asyncio
 import json
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -15,6 +16,13 @@ from .bridge import MockUnityBridge, NullRendererBridge, RendererBridge
 from .state import CommandType, NodeState
 
 SUPPORTED_COMMANDS: set[str] = {"LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"}
+
+
+@dataclass
+class WarnRateState:
+    window_start_ms: int
+    emitted: int = 0
+    suppressed: int = 0
 
 
 class RenderNodeAgent:
@@ -33,6 +41,8 @@ class RenderNodeAgent:
         max_runtime_sec: float = 0.0,
         diagnostics_file: str | None = None,
         diagnostics_sample_every: int = 1,
+        warn_rate_window_sec: float = 30.0,
+        warn_rate_burst: int = 3,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.node_id = node_id
@@ -46,6 +56,8 @@ class RenderNodeAgent:
         self.max_runtime_sec = max(0.0, max_runtime_sec)
         self.diagnostics_file = diagnostics_file
         self.diagnostics_sample_every = max(1, diagnostics_sample_every)
+        self.warn_rate_window_sec = max(1.0, warn_rate_window_sec)
+        self.warn_rate_burst = max(1, warn_rate_burst)
         self.bridge = bridge or NullRendererBridge()
         self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge)
         self._client = httpx.AsyncClient(timeout=5.0)
@@ -62,6 +74,9 @@ class RenderNodeAgent:
         self._ws_reconnect_attempts = 0
         self._diagnostics_emitted_count = 0
         self._diagnostics_skipped_count = 0
+        self._warn_emitted_count = 0
+        self._warn_suppressed_count = 0
+        self._warn_rate_state: dict[str, WarnRateState] = {}
 
     async def _sleep_or_stop(self, seconds: float) -> bool:
         try:
@@ -76,6 +91,34 @@ class RenderNodeAgent:
             print(text, file=sys.stderr)
         else:
             print(text)
+
+    def _log_warn_limited(self, key: str, message: str, now_ms: int | None = None) -> None:
+        now = now_ms if now_ms is not None else int(time.time() * 1000)
+        window_ms = int(self.warn_rate_window_sec * 1000)
+        state = self._warn_rate_state.get(key)
+        if state is None:
+            state = WarnRateState(window_start_ms=now)
+            self._warn_rate_state[key] = state
+
+        if now - state.window_start_ms >= window_ms:
+            if state.suppressed > 0:
+                self._log(
+                    "warn",
+                    f"rate_limited_summary key={key} suppressed={state.suppressed} window_sec={self.warn_rate_window_sec:g}",
+                )
+                self._warn_emitted_count += 1
+            state.window_start_ms = now
+            state.emitted = 0
+            state.suppressed = 0
+
+        if state.emitted < self.warn_rate_burst:
+            self._log("warn", message)
+            state.emitted += 1
+            self._warn_emitted_count += 1
+            return
+
+        state.suppressed += 1
+        self._warn_suppressed_count += 1
 
     def _should_emit_diagnostics(self, tick_index: int) -> bool:
         return tick_index % self.diagnostics_sample_every == 0
@@ -102,7 +145,10 @@ class RenderNodeAgent:
                 return
             except Exception as exc:
                 self._last_register_error = str(exc)
-                self._log("warn", f"register_failed node={self.node_id} error={self._last_register_error}")
+                self._log_warn_limited(
+                    key="register_failed",
+                    message=f"register_failed node={self.node_id} error={self._last_register_error}",
+                )
                 if await self._sleep_or_stop(wait_sec):
                     return
                 wait_sec = min(8.0, wait_sec * 2.0)
@@ -121,7 +167,10 @@ class RenderNodeAgent:
                 self._last_heartbeat_error = str(exc)
                 self._heartbeat_error_count += 1
                 self._heartbeat_consecutive_error_count += 1
-                self._log("warn", f"heartbeat_failed node={self.node_id} error={self._last_heartbeat_error}")
+                self._log_warn_limited(
+                    key="heartbeat_failed",
+                    message=f"heartbeat_failed node={self.node_id} error={self._last_heartbeat_error}",
+                )
             if await self._sleep_or_stop(self.heartbeat_interval_sec):
                 return
 
@@ -153,12 +202,18 @@ class RenderNodeAgent:
                         except json.JSONDecodeError:
                             self._command_ignored_count += 1
                             self._last_ws_error = "invalid_json_frame"
-                            self._log("warn", f"ws_invalid_json node={self.node_id}")
+                            self._log_warn_limited(
+                                key="ws_invalid_json",
+                                message=f"ws_invalid_json node={self.node_id}",
+                            )
                             continue
                         await self.process_ws_message(msg)
             except Exception as exc:
                 self._last_ws_error = str(exc)
-                self._log("warn", f"ws_loop_error node={self.node_id} error={self._last_ws_error}")
+                self._log_warn_limited(
+                    key="ws_loop_error",
+                    message=f"ws_loop_error node={self.node_id} error={self._last_ws_error}",
+                )
             finally:
                 self._ws_connected = False
                 self._ws_reconnect_attempts += 1
@@ -173,7 +228,10 @@ class RenderNodeAgent:
         if command not in SUPPORTED_COMMANDS:
             self._command_ignored_count += 1
             self._last_ws_error = f"unsupported_command:{command or 'EMPTY'}"
-            self._log("warn", f"ws_unsupported_command node={self.node_id} command={command or 'EMPTY'}")
+            self._log_warn_limited(
+                key="ws_unsupported_command",
+                message=f"ws_unsupported_command node={self.node_id} command={command or 'EMPTY'}",
+            )
             return
 
         raw_seq = msg.get("seq", 0)
@@ -182,12 +240,18 @@ class RenderNodeAgent:
         except (TypeError, ValueError):
             self._command_ignored_count += 1
             self._last_ws_error = "invalid_command_seq"
-            self._log("warn", f"ws_invalid_seq node={self.node_id} seq={raw_seq!r}")
+            self._log_warn_limited(
+                key="ws_invalid_seq",
+                message=f"ws_invalid_seq node={self.node_id} seq={raw_seq!r}",
+            )
             return
         if seq < 0:
             self._command_ignored_count += 1
             self._last_ws_error = "negative_command_seq"
-            self._log("warn", f"ws_negative_seq node={self.node_id} seq={seq}")
+            self._log_warn_limited(
+                key="ws_negative_seq",
+                message=f"ws_negative_seq node={self.node_id} seq={seq}",
+            )
             return
 
         self._command_received_count += 1
@@ -213,6 +277,10 @@ class RenderNodeAgent:
         snapshot["diagnostics_sample_every"] = self.diagnostics_sample_every
         snapshot["diagnostics_emitted_count"] = self._diagnostics_emitted_count
         snapshot["diagnostics_skipped_count"] = self._diagnostics_skipped_count
+        snapshot["warn_rate_window_sec"] = self.warn_rate_window_sec
+        snapshot["warn_rate_burst"] = self.warn_rate_burst
+        snapshot["warn_emitted_count"] = self._warn_emitted_count
+        snapshot["warn_suppressed_count"] = self._warn_suppressed_count
         return snapshot
 
     async def diagnostics_loop(self) -> None:
@@ -305,6 +373,18 @@ async def main() -> None:
         default=1,
         help="Emit one diagnostics sample every N intervals (N>=1).",
     )
+    parser.add_argument(
+        "--warn-rate-window-sec",
+        type=float,
+        default=30.0,
+        help="Rate-limit repeated warn events within this window.",
+    )
+    parser.add_argument(
+        "--warn-rate-burst",
+        type=int,
+        default=3,
+        help="Maximum warn emits per event key per window before suppression.",
+    )
     args = parser.parse_args()
 
     bridge: RendererBridge
@@ -327,6 +407,8 @@ async def main() -> None:
         max_runtime_sec=args.max_runtime_sec,
         diagnostics_file=args.diagnostics_file,
         diagnostics_sample_every=args.diagnostics_sample_every,
+        warn_rate_window_sec=args.warn_rate_window_sec,
+        warn_rate_burst=args.warn_rate_burst,
     )
     try:
         await agent.run()

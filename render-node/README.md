@@ -52,6 +52,8 @@ Runtime tuning flags:
 - `--max-runtime-sec` (default `0`, disabled)
 - `--diagnostics-file` (optional path; appends JSONL diagnostics snapshots)
 - `--diagnostics-sample-every` (default `1`; emit one diagnostics sample per N intervals)
+- `--warn-rate-window-sec` (default `30`; warning rate-limit window per event key)
+- `--warn-rate-burst` (default `3`; max warnings per event key per window before suppression)
 
 ## Run Two Nodes (sync test)
 
@@ -80,6 +82,7 @@ From repo root:
 ```bash
 make render-test
 make render-compile
+make render-smoke
 ```
 
 ## Notes
@@ -90,3 +93,5 @@ make render-compile
 - Agent ignores malformed WS JSON frames and unsupported/invalid commands without crashing loops.
 - Diagnostics output includes heartbeat counters, reconnect attempts, and command history stats.
 - Log stream policy: info logs go to stdout; warn/error logs go to stderr.
+- Repeated warning events are rate-limited with summary lines to reduce log flooding.
+- `make render-smoke` runs a bounded end-to-end node session against local orchestration and validates diagnostics output.

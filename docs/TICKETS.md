@@ -547,3 +547,49 @@ Checks:
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
+
+## SC-031 Warn Log Backpressure / Rate Limiting
+
+Ticket: SC-031
+Scope: rate-limit repeated warn events to reduce log flood during unstable network/runtime conditions.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/tests/test_agent.py`
+- `render-node/README.md`
+Out of scope:
+- protocol/schema changes
+Acceptance:
+- [x] repeated warn events are rate-limited per event key
+- [x] suppression summary emitted when rate-limit window rolls over
+- [x] diagnostics snapshot includes warn emitted/suppressed counters
+- [x] runtime flags added for rate-limit tuning
+Checks:
+- [x] `make render-test`
+- [x] `make render-compile`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-032 Render Node End-to-End Smoke Gate
+
+Ticket: SC-032
+Scope: add a one-command bounded runtime smoke check for render-node against local orchestration.
+Owner: lead-agent (this chat)
+Files allowed:
+- `scripts/render-smoke.sh`
+- `Makefile`
+- `render-node/README.md`
+Out of scope:
+- orchestration runtime behavior changes
+- protocol/schema changes
+Acceptance:
+- [x] smoke script starts orchestration, runs bounded render-node session, and validates diagnostics output
+- [x] root target `make render-smoke` added
+- [x] smoke artifacts stored under `.sanity-logs/render-smoke`
+Checks:
+- [x] `make render-smoke`
+- [x] `make render-test`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note

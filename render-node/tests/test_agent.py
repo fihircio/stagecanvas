@@ -33,6 +33,8 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(self.agent.ws_reconnect_initial_sec, 0.1)
         self.assertGreaterEqual(self.agent.ws_reconnect_max_sec, self.agent.ws_reconnect_initial_sec)
         self.assertEqual(self.agent.diagnostics_sample_every, 1)
+        self.assertGreaterEqual(self.agent.warn_rate_window_sec, 1.0)
+        self.assertGreaterEqual(self.agent.warn_rate_burst, 1)
 
     async def test_process_ws_message_ignores_unknown_command(self) -> None:
         self.agent = RenderNodeAgent(
@@ -93,6 +95,10 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("diagnostics_sample_every", snapshot)
         self.assertIn("diagnostics_emitted_count", snapshot)
         self.assertIn("diagnostics_skipped_count", snapshot)
+        self.assertIn("warn_rate_window_sec", snapshot)
+        self.assertIn("warn_rate_burst", snapshot)
+        self.assertIn("warn_emitted_count", snapshot)
+        self.assertIn("warn_suppressed_count", snapshot)
         self.assertEqual(snapshot["command_received_count"], 1)
 
     async def test_diagnostics_loop_writes_file(self) -> None:
@@ -145,6 +151,30 @@ class RenderNodeAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[render-node/info] hello", out.getvalue())
         self.assertIn("[render-node/warn] oops", err.getvalue())
         self.assertIn("[render-node/error] boom", err.getvalue())
+
+    async def test_warn_rate_limiter_suppresses_repeated_events(self) -> None:
+        self.agent = RenderNodeAgent(
+            base_url="http://localhost:8010",
+            node_id="n9",
+            label="Node",
+            bridge=NullRendererBridge(),
+            warn_rate_window_sec=10.0,
+            warn_rate_burst=2,
+        )
+        out = io.StringIO()
+        err = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            self.agent._log_warn_limited("heartbeat_failed", "heartbeat_failed node=n9", now_ms=1_000)
+            self.agent._log_warn_limited("heartbeat_failed", "heartbeat_failed node=n9", now_ms=1_100)
+            self.agent._log_warn_limited("heartbeat_failed", "heartbeat_failed node=n9", now_ms=1_200)
+            # Move beyond window to force summary + fresh emit.
+            self.agent._log_warn_limited("heartbeat_failed", "heartbeat_failed node=n9", now_ms=12_500)
+
+        text = err.getvalue()
+        self.assertEqual(text.count("heartbeat_failed node=n9"), 3)
+        self.assertIn("rate_limited_summary key=heartbeat_failed suppressed=1", text)
+        self.assertEqual(self.agent._warn_suppressed_count, 1)
+        self.assertEqual(self.agent._warn_emitted_count, 4)
 
 
 if __name__ == "__main__":
