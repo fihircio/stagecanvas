@@ -51,6 +51,7 @@ Runtime tuning flags:
 - `--ws-reconnect-max-sec` (default `8.0`)
 - `--max-runtime-sec` (default `0`, disabled)
 - `--diagnostics-file` (optional path; appends JSONL diagnostics snapshots)
+- `--diagnostics-sample-every` (default `1`; emit one diagnostics sample per N intervals)
 
 ## Run Two Nodes (sync test)
 
@@ -88,3 +89,4 @@ make render-compile
 - Agent retries node registration with backoff and keeps connection/error diagnostics internally.
 - Agent ignores malformed WS JSON frames and unsupported/invalid commands without crashing loops.
 - Diagnostics output includes heartbeat counters, reconnect attempts, and command history stats.
+- Log stream policy: info logs go to stdout; warn/error logs go to stderr.

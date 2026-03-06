@@ -525,3 +525,25 @@ Checks:
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
+
+## SC-030 Diagnostics Sampling + Log Stream Split
+
+Ticket: SC-030
+Scope: reduce diagnostics noise and split info/warn/error output streams.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/tests/test_agent.py`
+- `render-node/README.md`
+Out of scope:
+- protocol/schema changes
+Acceptance:
+- [x] diagnostics sampling control added (`--diagnostics-sample-every`)
+- [x] diagnostics snapshot includes emit/skip counters
+- [x] info logs route to stdout and warn/error logs route to stderr
+Checks:
+- [x] `make render-test`
+- [x] `make render-compile`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
