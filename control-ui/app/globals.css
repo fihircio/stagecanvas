@@ -239,6 +239,25 @@ body {
   gap: 10px;
 }
 
+.reliability-overview {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.reliability-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid #b8c7da;
+  color: #1f2937;
+  background: #eef2f7;
+}
+
 .drift-overview {
   display: flex;
   gap: 8px;
@@ -504,6 +523,18 @@ body {
   color: #991b1b;
   background: #fef2f2;
   border-color: #fecaca;
+}
+
+.queue-depth-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #1f2937;
+  border: 1px solid #b8c7da;
+  background: #eef2f7;
 }
 
 .empty-card {

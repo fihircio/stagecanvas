@@ -20,6 +20,22 @@ export type NodeSnapshot = {
   last_seen_ms: number;
   command_seq: number;
   pending_commands: number;
+  queue_depth?: number;
+  replay_count?: number;
+  queued_count?: number;
+  reconnect_count?: number;
+  cache?: {
+    show_id: string | null;
+    preload_state: "EMPTY" | "LOADING" | "READY" | "FAILED";
+    asset_total: number;
+    cached_assets: number;
+    bytes_total: number;
+    bytes_cached: number;
+    progress_assets_pct: number;
+    progress_bytes_pct: number;
+    progress_message: string | null;
+    last_preload_request_id: string | null;
+  };
 };
 
 export type DriftSloSnapshot = {

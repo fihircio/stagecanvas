@@ -36,14 +36,21 @@ class NodeRecord:
     connected: bool = False
     command_seq: int = 0
     pending_commands: list[dict[str, Any]] = field(default_factory=list)
+    replay_count: int = 0
+    queued_count: int = 0
+    reconnect_count: int = 0
+    ws_connect_count: int = 0
     cache: dict[str, Any] = field(
         default_factory=lambda: {
             "show_id": None,
-            "preload_state": "IDLE",
+            "preload_state": "EMPTY",
             "asset_total": 0,
             "cached_assets": 0,
             "bytes_total": 0,
             "bytes_cached": 0,
+            "progress_assets_pct": 0.0,
+            "progress_bytes_pct": 0.0,
+            "progress_message": None,
             "last_preload_request_id": None,
         }
     )
@@ -85,7 +92,7 @@ class NodeRegistry:
             record.drift_level = self.classify_drift_level(record.drift_ms)
             record.show_id = hb.show_id
             if hb.cache is not None:
-                record.cache = hb.cache.model_dump()
+                record.cache = self.normalize_cache(hb.cache.model_dump(mode="json"))
             record.last_seen_ms = int(time.time() * 1000)
             return record
 
@@ -96,6 +103,9 @@ class NodeRegistry:
                 return None
             record.ws = ws
             record.connected = True
+            record.ws_connect_count += 1
+            if record.ws_connect_count > 1:
+                record.reconnect_count += 1
             record.last_seen_ms = int(time.time() * 1000)
             return record
 
@@ -126,6 +136,7 @@ class NodeRegistry:
             if record is None:
                 return None, None, "NOT_REGISTERED"
             if cmd.seq <= record.command_seq:
+                record.replay_count += 1
                 return record, None, "DUPLICATE_OR_STALE_SEQ"
             envelope = {
                 "type": "COMMAND",
@@ -141,6 +152,7 @@ class NodeRegistry:
             }
             record.command_seq = max(record.command_seq, cmd.seq)
             record.pending_commands.append(envelope)
+            record.queued_count += 1
             return record, envelope, "QUEUED"
 
     async def dequeue_pending(self, node_id: str) -> list[dict[str, Any]]:
@@ -197,6 +209,10 @@ class NodeRegistry:
             "capabilities": record.capabilities,
             "command_seq": record.command_seq,
             "pending_commands": len(record.pending_commands),
+            "queue_depth": len(record.pending_commands),
+            "replay_count": record.replay_count,
+            "queued_count": record.queued_count,
+            "reconnect_count": record.reconnect_count,
             "cache": record.cache,
         }
 
@@ -208,3 +224,49 @@ class NodeRegistry:
         if abs_drift >= DRIFT_WARN_MS:
             return "WARN"
         return "OK"
+
+    @staticmethod
+    def normalize_cache(raw: dict[str, Any]) -> dict[str, Any]:
+        legacy_state = str(raw.get("preload_state", "EMPTY"))
+        state_map = {
+            "IDLE": "EMPTY",
+            "PRELOADING": "LOADING",
+            "ERROR": "FAILED",
+        }
+        preload_state = state_map.get(legacy_state, legacy_state)
+        if preload_state not in {"EMPTY", "LOADING", "READY", "FAILED"}:
+            preload_state = "FAILED"
+
+        asset_total = max(0, int(raw.get("asset_total", 0)))
+        cached_assets = max(0, int(raw.get("cached_assets", 0)))
+        bytes_total = max(0, int(raw.get("bytes_total", 0)))
+        bytes_cached = max(0, int(raw.get("bytes_cached", 0)))
+
+        def pct(done: int, total: int, fallback_state: str) -> float:
+            if total > 0:
+                return max(0.0, min(100.0, (done / total) * 100.0))
+            if fallback_state == "READY":
+                return 100.0
+            if fallback_state == "EMPTY":
+                return 0.0
+            return 0.0
+
+        progress_assets_pct = raw.get("progress_assets_pct")
+        if progress_assets_pct is None:
+            progress_assets_pct = pct(cached_assets, asset_total, preload_state)
+        progress_bytes_pct = raw.get("progress_bytes_pct")
+        if progress_bytes_pct is None:
+            progress_bytes_pct = pct(bytes_cached, bytes_total, preload_state)
+
+        return {
+            "show_id": raw.get("show_id"),
+            "preload_state": preload_state,
+            "asset_total": asset_total,
+            "cached_assets": cached_assets,
+            "bytes_total": bytes_total,
+            "bytes_cached": bytes_cached,
+            "progress_assets_pct": round(float(progress_assets_pct), 1),
+            "progress_bytes_pct": round(float(progress_bytes_pct), 1),
+            "progress_message": raw.get("progress_message"),
+            "last_preload_request_id": raw.get("last_preload_request_id"),
+        }

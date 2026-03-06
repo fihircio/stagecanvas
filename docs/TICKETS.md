@@ -634,6 +634,69 @@ Checks:
 Deliverable:
 - [x] branch + handoff note
 
+## SC-038 Per-node Replay Counters in Operator Snapshot
+
+Ticket: SC-038
+Scope: add per-node reliability counters (replay/queued/reconnect + queue depth) to operator snapshots.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_operator_snapshot_reliability.py`
+Out of scope:
+- protocol major-version changes
+Acceptance:
+- [x] operator snapshots include per-node replay counter
+- [x] operator snapshots include queued/reconnect counters and queue depth
+- [x] websocket operator snapshot test validates counter presence/behavior
+Checks:
+- [x] `cd orchestration-server && python -m unittest discover -s tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-039 Reliability Panel in Control UI
+
+Ticket: SC-039
+Scope: show replay counters, reconnect counts, and queue depth badges in control UI.
+Owner: lead-agent (this chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- command dispatch behavior changes
+Acceptance:
+- [x] panel-level reliability totals visible
+- [x] per-node queue depth badge visible
+- [x] per-node replay/reconnect counters visible
+Checks:
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-040 Preload Lifecycle Contract v2
+
+Ticket: SC-040
+Scope: update preload cache contract to v2 lifecycle states and progress fields.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_preload_contract_v2.py`
+Out of scope:
+- non-cache command schema changes
+Acceptance:
+- [x] lifecycle states normalized to `EMPTY/LOADING/READY/FAILED`
+- [x] progress fields present (`progress_assets_pct`, `progress_bytes_pct`, `progress_message`)
+- [x] legacy heartbeat states accepted and normalized for backward compatibility
+Checks:
+- [x] `cd orchestration-server && python -m unittest discover -s tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
 ## SC-035 Two-Node Sync Proof Test
 
 Ticket: SC-035
@@ -698,3 +761,191 @@ Checks:
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
+
+## SC-038 Replay Observability in Operator Snapshot
+
+Ticket: SC-038
+Scope: expose per-node command replay and queue-depth counters for live reliability observability.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_replay_observability.py`
+- docs tied to these files
+Out of scope:
+- websocket schema version changes
+- UI presentation changes
+Acceptance:
+- [ ] per-node snapshot includes replay counter and queued command depth
+- [ ] aggregate reliability summary is available in operator snapshot payload
+- [ ] counters are deterministic across reconnect cycles in tests
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-039 Control UI Reliability Panel
+
+Ticket: SC-039
+Scope: add operator-facing reliability panel for replay/queue/reconnect visibility.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- orchestration command dispatch behavior changes
+- protocol/schema changes
+Acceptance:
+- [ ] panel shows per-node replay count, queue depth, and reconnect attempts
+- [ ] non-zero queue/replay state gets clear alert styling
+- [ ] panel updates from operator websocket snapshots without manual refresh
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-040 Preload Cache Lifecycle v2 Contract
+
+Ticket: SC-040
+Scope: extend preload/cache contract with explicit lifecycle states and progress fields.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_preload_lifecycle_contract.py`
+- `render-node/app/state.py`
+- `render-node/tests/test_state.py`
+- docs tied to these files
+Out of scope:
+- real media transfer implementation
+- breaking changes to existing command protocol
+Acceptance:
+- [ ] cache lifecycle states available (`EMPTY`, `LOADING`, `READY`, `FAILED`)
+- [ ] preload progress fields are additive and optional in heartbeat/snapshot payloads
+- [ ] render-node state transitions are covered by deterministic tests
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-041 Preload Multi-Node Reliability Tests
+
+Ticket: SC-041
+Scope: add integration tests for preload success, partial failure, and retry behavior across multiple nodes.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/tests/test_preload_reliability.py`
+Out of scope:
+- UI changes
+- render-node runtime implementation changes beyond test fixtures/mocks
+Acceptance:
+- [ ] success path validates all targeted nodes converge to `READY`
+- [ ] partial failure path reports actionable reason codes and per-node outcomes
+- [ ] retry path validates idempotent behavior with stable request tracking
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-042 PLAY_AT Readiness Gate
+
+Ticket: SC-042
+Scope: enforce preload readiness guard for `PLAY_AT` dispatch to targeted nodes.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_play_at_readiness_gate.py`
+- docs tied to these files
+Out of scope:
+- UI feature work
+- schema version changes
+Acceptance:
+- [ ] `PLAY_AT` rejects targets not in `READY` preload state with actionable reason code
+- [ ] mixed target requests return clear per-node success/failure details
+- [ ] existing idempotency behavior remains intact under readiness failures
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-043 Operator Preload Controls + Readiness UX
+
+Ticket: SC-043
+Scope: add preload controls and readiness status flows in operator UI.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- backend command semantics changes
+- protocol/schema version changes
+Acceptance:
+- [ ] operator can trigger preload for all nodes or selected targets
+- [ ] node cards show cache lifecycle state and preload progress
+- [ ] non-ready nodes are clearly indicated before playback actions
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-044 Drift History Ring Buffer API
+
+Ticket: SC-044
+Scope: persist short rolling drift history for trend analysis and alerting.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_drift_history.py`
+- docs tied to these files
+Out of scope:
+- long-term metrics storage backend
+- UI chart implementation
+Acceptance:
+- [ ] per-node rolling drift history buffer exposed via snapshot/additive endpoint field
+- [ ] history window size is bounded and configurable
+- [ ] deterministic tests verify eviction order and data integrity
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-045 Sustained Drift Alert Policy
+
+Ticket: SC-045
+Scope: add sustained WARN/CRITICAL alert policy to reduce one-off drift noise.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_sustained_drift_alerts.py`
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- docs tied to these files
+Out of scope:
+- PTP/genlock implementation
+- breaking protocol changes
+Acceptance:
+- [ ] alert raised only after configurable consecutive WARN/CRITICAL windows
+- [ ] alert clears after sustained return to `OK`
+- [ ] operator UI surfaces sustained alert state distinctly from instantaneous drift level
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note

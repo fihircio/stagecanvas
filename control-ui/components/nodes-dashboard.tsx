@@ -138,6 +138,16 @@ export function NodesDashboard() {
   );
   const activePreviewNode =
     previewTab === "combined" ? null : nodes.find((n) => n.node_id === previewTab) ?? null;
+  const reliabilityTotals = nodes.reduce(
+    (acc, node) => {
+      acc.replays += node.replay_count ?? 0;
+      acc.reconnects += node.reconnect_count ?? 0;
+      acc.queueDepth += node.queue_depth ?? node.pending_commands ?? 0;
+      acc.queued += node.queued_count ?? 0;
+      return acc;
+    },
+    { replays: 0, reconnects: 0, queueDepth: 0, queued: 0 },
+  );
   const globalPositionMs = activePreviewNode
     ? activePreviewNode.position_ms
     : Math.max(0, ...nodes.map((n) => n.position_ms));
@@ -420,6 +430,12 @@ export function NodesDashboard() {
 
         <aside className="node-panel">
           <div className="section-title">Node Status</div>
+          <div className="reliability-overview">
+            <span className="reliability-pill">Replays {reliabilityTotals.replays}</span>
+            <span className="reliability-pill">Reconnects {reliabilityTotals.reconnects}</span>
+            <span className="reliability-pill">Queue Depth {reliabilityTotals.queueDepth}</span>
+            <span className="reliability-pill">Queued Total {reliabilityTotals.queued}</span>
+          </div>
           <div className="drift-overview">
             <span className="drift-count drift-count-ok">OK {serverDriftSlo?.ok ?? driftLevelCounts.ok}</span>
             <span className="drift-count drift-count-warn">WARN {serverDriftSlo?.warn ?? driftLevelCounts.warn}</span>
@@ -441,9 +457,14 @@ export function NodesDashboard() {
                     <span>CPU {number(node.metrics.cpu_pct)}%</span>
                     <span>Sync {node.drift_level}</span>
                     <span>Latency {number(node.drift_ms)}ms</span>
+                    <span>Queue {node.queue_depth ?? node.pending_commands}</span>
+                    <span>Replay {node.replay_count ?? 0}</span>
+                    <span>Reconnect {node.reconnect_count ?? 0}</span>
+                    <span>Preload {node.cache?.preload_state ?? "EMPTY"}</span>
                   </div>
                   <div className="node-actions">
                     <span className={`drift-pill drift-${node.drift_level.toLowerCase()}`}>{node.drift_level}</span>
+                    <span className="queue-depth-badge">Q {node.queue_depth ?? node.pending_commands}</span>
                   </div>
                 </article>
               );
