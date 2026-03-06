@@ -324,7 +324,15 @@ class RenderNodeAgent:
         try:
             if self.max_runtime_sec > 0:
                 await self._sleep_or_stop(self.max_runtime_sec)
-                self._stop_event.set()
+                if not self._stop_event.is_set():
+                    self._log("info", f"max_runtime_reached node={self.node_id} seconds={self.max_runtime_sec}")
+                    self._stop_event.set()
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                return
+
             await asyncio.gather(*tasks)
         finally:
             self._stop_event.set()
