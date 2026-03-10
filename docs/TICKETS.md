@@ -1314,15 +1314,15 @@ Out of scope:
 - cross-node cache sync
 - cloud storage
 Acceptance:
-- [ ] cache index persists to local JSON file
-- [ ] restart restores cache metadata
-- [ ] tests validate persistence and restore accuracy
+- [x] cache index persists to local JSON file
+- [x] restart restores cache metadata
+- [x] tests validate persistence and restore accuracy
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-065 Playback Stub Reads Cached Media
 
@@ -1338,15 +1338,15 @@ Out of scope:
 - real decoding pipeline
 - GPU playback
 Acceptance:
-- [ ] `PLAY_AT` fails with reason code if required asset missing from cache
-- [ ] success path verifies cache metadata before playback start
-- [ ] tests cover missing asset and success cases
+- [x] `PLAY_AT` fails with reason code if required asset missing from cache
+- [x] success path verifies cache metadata before playback start
+- [x] tests cover missing asset and success cases
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-066 Media Profile Metadata + Validation
 

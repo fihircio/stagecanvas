@@ -104,3 +104,5 @@ make render-smoke
 - Playback stub emits frame counts during `PLAYING` and resets on `STOP`.
 - `make render-smoke` runs a bounded end-to-end node session against local orchestration and validates diagnostics output.
 - Cache index stub tracks assets with LRU eviction (`app/state.py`).
+- Cache index is persisted to local JSON and restored on restart (`app/state.py`).
+- Playback stub validates required assets are present in cache before `PLAY_AT`.

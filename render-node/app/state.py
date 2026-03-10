@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 from .bridge import NullRendererBridge, RendererBridge
@@ -69,6 +71,33 @@ class CacheIndex:
             evicted.append(entry)
         return evicted
 
+    def to_payload(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "asset_id": entry.asset_id,
+                "size_bytes": entry.size_bytes,
+                "last_access_ms": entry.last_access_ms,
+            }
+            for entry in self._entries.values()
+        ]
+
+    @classmethod
+    def from_payload(cls, payload: list[dict[str, Any]], max_bytes: int) -> "CacheIndex":
+        cache = cls(max_bytes=max_bytes)
+        for item in payload:
+            asset_id = str(item.get("asset_id", ""))
+            if not asset_id:
+                continue
+            size_bytes = int(item.get("size_bytes", 0))
+            last_access_ms = int(item.get("last_access_ms", 0))
+            cache._entries[asset_id] = CacheAssetEntry(
+                asset_id=asset_id,
+                size_bytes=size_bytes,
+                last_access_ms=last_access_ms,
+            )
+            cache._current_bytes += size_bytes
+        return cache
+
 
 @dataclass
 class NodeState:
@@ -95,6 +124,7 @@ class NodeState:
     cache_progress_message: str | None = None
     cache_last_preload_request_id: str | None = None
     cache_index: CacheIndex = field(default_factory=CacheIndex)
+    cache_index_path: Path | None = None
     mapping_config: dict[str, Any] | None = None
     playback_frame_interval_ms: int = 33
     playback_accumulator_ms: int = 0
@@ -103,6 +133,31 @@ class NodeState:
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
     command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    def __post_init__(self) -> None:
+        if self.cache_index_path is None:
+            self.cache_index_path = Path(__file__).resolve().parent.parent / "data" / f"cache-{self.node_id}.json"
+        self._load_cache_index()
+
+    def _persist_cache_index(self) -> None:
+        if self.cache_index_path is None:
+            return
+        self.cache_index_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = self.cache_index.to_payload()
+        tmp_path = self.cache_index_path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        tmp_path.replace(self.cache_index_path)
+
+    def _load_cache_index(self) -> None:
+        if self.cache_index_path is None or not self.cache_index_path.exists():
+            return
+        raw = json.loads(self.cache_index_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            return
+        self.cache_index = CacheIndex.from_payload(raw, max_bytes=self.cache_index.max_bytes)
+
+    def cache_contains(self, asset_id: str) -> bool:
+        return self.cache_index.touch(asset_id, now_ms=int(time.time() * 1000))
 
     async def apply_command(
         self,
@@ -119,6 +174,7 @@ class NodeState:
             "command": command,
             "status": "accepted",
             "detail": "",
+            "reason_code": None,
         }
         async with self._lock:
             if seq <= self.last_seq:
@@ -144,6 +200,9 @@ class NodeState:
                             size = asset.get("size_bytes", 0)
                             if isinstance(size, (int, float)):
                                 total_bytes += max(0, int(size))
+                            media_id = asset.get("media_id")
+                            if isinstance(media_id, str) and media_id:
+                                self.cache_index.add(media_id, int(size or 0), now_ms=history["at_ms"])
                     self.cache_show_id = self.show_id
                     self.cache_preload_state = "LOADING"
                     self.cache_asset_total = len(assets)
@@ -157,6 +216,7 @@ class NodeState:
                         str(payload["request_id"]) if payload.get("request_id") is not None else None
                     )
                     self.cache_preload_state = "READY"
+                    self._persist_cache_index()
                     history["detail"] = "preloaded"
                 elif bool(payload.get("transfer_only", False)):
                     assets = payload.get("assets", [])
@@ -168,6 +228,9 @@ class NodeState:
                             size = asset.get("size_bytes", 0)
                             if isinstance(size, (int, float)):
                                 total_bytes += max(0, int(size))
+                            media_id = asset.get("media_id")
+                            if isinstance(media_id, str) and media_id:
+                                self.cache_index.add(media_id, int(size or 0), now_ms=history["at_ms"])
                     self.cache_show_id = self.show_id
                     self.cache_preload_state = "LOADING"
                     self.cache_asset_total = len(assets)
@@ -185,6 +248,7 @@ class NodeState:
                     self.cache_progress_assets_pct = 100.0 if assets else 0.0
                     self.cache_progress_bytes_pct = 100.0 if total_bytes > 0 else 0.0
                     self.cache_preload_state = "READY"
+                    self._persist_cache_index()
                     history["detail"] = "transfer"
                 else:
                     self.status = "LOADING"
@@ -196,6 +260,25 @@ class NodeState:
                     self.playback_started_ms = None
             elif command == "PLAY_AT":
                 self.show_id = str(payload.get("show_id", self.show_id or "demo-show"))
+                required_assets = payload.get("required_assets") or payload.get("assets")
+                missing: list[str] = []
+                if isinstance(required_assets, list):
+                    for asset in required_assets:
+                        media_id = None
+                        if isinstance(asset, str):
+                            media_id = asset
+                        elif isinstance(asset, dict):
+                            media_id = asset.get("media_id")
+                        if isinstance(media_id, str) and media_id:
+                            if not self.cache_contains(media_id):
+                                missing.append(media_id)
+                if missing:
+                    history["status"] = "error"
+                    history["reason_code"] = "CACHE_MISS"
+                    history["detail"] = f"missing_assets:{','.join(missing)}"
+                    self.status = "ERROR"
+                    self.command_history.append(history)
+                    return
                 if target_time_ms is not None:
                     self.scheduled_play_time_ms = target_time_ms
                 else:
