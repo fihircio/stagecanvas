@@ -126,7 +126,11 @@ export function NodesDashboard() {
   }
 
   const driftThreshold = parsedDriftThreshold();
-  const driftAlertCount = nodes.filter((n) => Math.abs(n.drift_ms) > driftThreshold).length;
+  const driftAlertCount = nodes.filter((n) => {
+    if (n.drift_alert_active !== undefined) return n.drift_alert_active;
+    if (n.drift_alert_level !== undefined) return (n.drift_alert_level ?? "OK") !== "OK";
+    return Math.abs(n.drift_ms) > driftThreshold;
+  }).length;
   const driftLevelCounts = nodes.reduce(
     (acc, node) => {
       if (node.drift_level === "CRITICAL") acc.critical += 1;
@@ -460,7 +464,10 @@ export function NodesDashboard() {
           </div>
           <div className="status-stack">
             {nodes.map((node) => {
-              const driftAlert = node.drift_level !== "OK";
+              const alertLevel = node.drift_alert_level ?? node.drift_level;
+              const driftAlert = node.drift_alert_active ?? alertLevel !== "OK";
+              const preloadState = node.cache?.preload_state ?? "EMPTY";
+              const preloadReady = preloadState === "READY" && (node.cache?.show_id ?? showId) === showId;
               return (
                 <article className={`node-card ${driftAlert ? "card-alert" : ""}`} key={node.node_id}>
                   <div className="node-title">
@@ -471,22 +478,28 @@ export function NodesDashboard() {
                     <span>GPU {number(node.metrics.gpu_pct)}%</span>
                     <span>CPU {number(node.metrics.cpu_pct)}%</span>
                     <span>Sync {node.drift_level}</span>
+                    <span>Alert {alertLevel}</span>
                     <span>Latency {number(node.drift_ms)}ms</span>
                     <span>Queue {node.queue_depth ?? node.pending_commands}</span>
                     <span>Replay {node.replay_count ?? 0}</span>
                     <span>Reconnect {node.reconnect_count ?? 0}</span>
-                    <span>Preload {node.cache?.preload_state ?? "EMPTY"}</span>
+                    <span>Preload {preloadState}</span>
                     <span>
                       Cache {node.cache?.cached_assets ?? 0}/{node.cache?.asset_total ?? 0} •{" "}
                       {node.cache?.progress_assets_pct?.toFixed(0) ?? 0}%
                     </span>
                   </div>
                   <div className="node-actions">
-                    <span className={`drift-pill drift-${node.drift_level.toLowerCase()}`}>{node.drift_level}</span>
+                    <span className={`drift-pill drift-${alertLevel.toLowerCase()}`}>{alertLevel}</span>
                     <span className="queue-depth-badge">Q {node.queue_depth ?? node.pending_commands}</span>
-                    <span className={`cache-pill cache-${(node.cache?.preload_state ?? "EMPTY").toLowerCase()}`}>
-                      {node.cache?.preload_state ?? "EMPTY"}
+                    <span className={`cache-pill cache-${preloadState.toLowerCase()}`}>
+                      {preloadState}
                     </span>
+                    {preloadReady ? (
+                      <span className="queue-depth-badge">READY</span>
+                    ) : (
+                      <span className="alert-pill">NOT READY</span>
+                    )}
                   </div>
                 </article>
               );

@@ -69,6 +69,14 @@ async def list_nodes() -> dict[str, object]:
     return {"nodes": await registry.list_nodes()}
 
 
+@app.get("/api/v1/nodes/{node_id}/drift_history")
+async def node_drift_history(node_id: str) -> dict[str, object]:
+    record = await registry.get(node_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
+    return {"node_id": node_id, "history": await registry.get_drift_history(node_id)}
+
+
 @app.get("/api/v1/slo")
 async def slo_snapshot() -> dict[str, object]:
     return {

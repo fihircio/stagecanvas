@@ -11,6 +11,8 @@ export type NodeSnapshot = {
   position_ms: number;
   drift_ms: number;
   drift_level: DriftLevel;
+  drift_alert_level?: DriftLevel;
+  drift_alert_active?: boolean;
   metrics: {
     cpu_pct: number;
     gpu_pct: number;

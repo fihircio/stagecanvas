@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from fastapi import WebSocket
 
-from .config import DRIFT_CRITICAL_MS, DRIFT_WARN_MS
+from .config import (
+    DRIFT_CRITICAL_MS,
+    DRIFT_HISTORY_MAXLEN,
+    DRIFT_SUSTAINED_CRITICAL_SAMPLES,
+    DRIFT_SUSTAINED_WARN_SAMPLES,
+    DRIFT_WARN_MS,
+)
 from .models import ControlCommand, HeartbeatRequest, NodeStatus, RegisterNodeRequest
 
 DriftLevel = Literal["OK", "WARN", "CRITICAL"]
@@ -24,6 +31,7 @@ class NodeRecord:
     position_ms: int = 0
     drift_ms: float = 0.0
     drift_level: DriftLevel = "OK"
+    drift_alert_level: DriftLevel = "OK"
     metrics: dict[str, Any] = field(
         default_factory=lambda: {
             "cpu_pct": 0.0,
@@ -40,6 +48,9 @@ class NodeRecord:
     queued_count: int = 0
     reconnect_count: int = 0
     ws_connect_count: int = 0
+    drift_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=DRIFT_HISTORY_MAXLEN))
+    sustained_warn_samples: int = 0
+    sustained_critical_samples: int = 0
     cache: dict[str, Any] = field(
         default_factory=lambda: {
             "show_id": None,
@@ -90,6 +101,29 @@ class NodeRegistry:
             record.position_ms = hb.position_ms
             record.drift_ms = hb.drift_ms
             record.drift_level = self.classify_drift_level(record.drift_ms)
+            record.drift_history.append(
+                {
+                    "timestamp_ms": int(time.time() * 1000),
+                    "drift_ms": record.drift_ms,
+                    "drift_level": record.drift_level,
+                }
+            )
+            if record.drift_level == "CRITICAL":
+                record.sustained_critical_samples += 1
+                record.sustained_warn_samples = 0
+            elif record.drift_level == "WARN":
+                record.sustained_warn_samples += 1
+                record.sustained_critical_samples = 0
+            else:
+                record.sustained_warn_samples = 0
+                record.sustained_critical_samples = 0
+
+            if record.sustained_critical_samples >= DRIFT_SUSTAINED_CRITICAL_SAMPLES:
+                record.drift_alert_level = "CRITICAL"
+            elif record.sustained_warn_samples >= DRIFT_SUSTAINED_WARN_SAMPLES:
+                record.drift_alert_level = "WARN"
+            else:
+                record.drift_alert_level = "OK"
             record.show_id = hb.show_id
             if hb.cache is not None:
                 record.cache = self.normalize_cache(hb.cache.model_dump(mode="json"))
@@ -125,6 +159,13 @@ class NodeRegistry:
     async def get(self, node_id: str) -> NodeRecord | None:
         async with self._lock:
             return self._nodes.get(node_id)
+
+    async def get_drift_history(self, node_id: str) -> list[dict[str, Any]]:
+        async with self._lock:
+            record = self._nodes.get(node_id)
+            if record is None:
+                return []
+            return list(record.drift_history)
 
     async def enqueue_command(
         self,
@@ -204,6 +245,8 @@ class NodeRegistry:
             "position_ms": record.position_ms,
             "drift_ms": record.drift_ms,
             "drift_level": drift_level,
+            "drift_alert_level": record.drift_alert_level,
+            "drift_alert_active": record.drift_alert_level != "OK",
             "metrics": record.metrics,
             "last_seen_ms": record.last_seen_ms,
             "capabilities": record.capabilities,

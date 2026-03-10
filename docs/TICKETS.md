@@ -949,14 +949,14 @@ Out of scope:
 - backend command semantics changes
 - protocol/schema version changes
 Acceptance:
-- [ ] operator can trigger preload for all nodes or selected targets
-- [ ] node cards show cache lifecycle state and preload progress
-- [ ] non-ready nodes are clearly indicated before playback actions
+- [x] operator can trigger preload for all nodes or selected targets
+- [x] node cards show cache lifecycle state and preload progress
+- [x] non-ready nodes are clearly indicated before playback actions
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-044 Drift History Ring Buffer API
 
@@ -973,14 +973,14 @@ Out of scope:
 - long-term metrics storage backend
 - UI chart implementation
 Acceptance:
-- [ ] per-node rolling drift history buffer exposed via snapshot/additive endpoint field
-- [ ] history window size is bounded and configurable
-- [ ] deterministic tests verify eviction order and data integrity
+- [x] per-node rolling drift history buffer exposed via snapshot/additive endpoint field
+- [x] history window size is bounded and configurable
+- [x] deterministic tests verify eviction order and data integrity
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-045 Sustained Drift Alert Policy
 
@@ -998,12 +998,12 @@ Out of scope:
 - PTP/genlock implementation
 - breaking protocol changes
 Acceptance:
-- [ ] alert raised only after configurable consecutive WARN/CRITICAL windows
-- [ ] alert clears after sustained return to `OK`
-- [ ] operator UI surfaces sustained alert state distinctly from instantaneous drift level
+- [x] alert raised only after configurable consecutive WARN/CRITICAL windows
+- [x] alert clears after sustained return to `OK`
+- [x] operator UI surfaces sustained alert state distinctly from instantaneous drift level
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note

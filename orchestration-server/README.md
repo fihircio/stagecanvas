@@ -27,6 +27,7 @@ uvicorn app.main:app --reload --port 8010
 - `POST /api/v1/nodes/register`
 - `POST /api/v1/nodes/{node_id}/heartbeat`
 - `GET /api/v1/nodes`
+- `GET /api/v1/nodes/{node_id}/drift_history`
 - `GET /api/v1/slo`
 - `GET /api/v1/timeline/snapshot`
 - `GET /api/v1/timeline/shows`
