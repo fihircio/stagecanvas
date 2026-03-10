@@ -261,6 +261,35 @@ async def schedule_play_at(body: SchedulePlayAtRequest) -> dict[str, object]:
             },
         )
 
+    target_ids = body.node_ids or await registry.active_node_ids()
+    not_ready: list[dict[str, str]] = []
+    for node_id in target_ids:
+        record = await registry.get(node_id)
+        if record is None:
+            not_ready.append({"node_id": node_id, "reason": "NOT_REGISTERED"})
+            continue
+        cache = record.cache or {}
+        preload_state = str(cache.get("preload_state", "EMPTY"))
+        cache_show_id = cache.get("show_id")
+        if preload_state != "READY" or (cache_show_id and cache_show_id != body.show_id):
+            not_ready.append(
+                {
+                    "node_id": node_id,
+                    "preload_state": preload_state,
+                    "cache_show_id": str(cache_show_id),
+                }
+            )
+    if not_ready:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason_code": "PLAY_AT_PRELOAD_NOT_READY",
+                "message": "One or more target nodes are not READY for preload.",
+                "not_ready": not_ready,
+                "required_state": "READY",
+            },
+        )
+
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="PLAY_AT",
@@ -269,7 +298,6 @@ async def schedule_play_at(body: SchedulePlayAtRequest) -> dict[str, object]:
         seq=command_ledger.next_seq(),
         origin="scheduler",
     )
-    target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
     response = {"ok": True, "scheduled": True, "play_at": body.target_time_ms, "dispatch": result}
     command_ledger.finalize_request("play_at", body.request_id, response)
@@ -431,6 +459,7 @@ async def node_socket(ws: WebSocket, node_id: str) -> None:
                             "position_ms": payload.get("position_ms", 0),
                             "drift_ms": payload.get("drift_ms", 0.0),
                             "show_id": payload.get("show_id"),
+                            "cache": payload.get("cache"),
                         }
                     )
                     await registry.heartbeat(node_id, hb)

@@ -189,6 +189,18 @@ export function NodesDashboard() {
     );
   };
 
+  const onPreload = async () => {
+    await postJson(
+      "/api/v1/shows/preload",
+      {
+        show_id: showId,
+        assets: [],
+        node_ids: targetNodeIds(),
+      },
+      "PRELOAD",
+    );
+  };
+
   const onSeek = async () => {
     const parsed = Number.parseInt(seekMs, 10);
     await postJson(
@@ -415,6 +427,9 @@ export function NodesDashboard() {
             <button className="btn" onClick={onLoadShow}>
               LOAD_SHOW
             </button>
+            <button className="btn" onClick={onPreload}>
+              PRELOAD
+            </button>
             <input className="input compact" value={seekMs} onChange={(e) => setSeekMs(e.target.value)} placeholder="position_ms" />
             <button className="btn" onClick={onSeek}>
               SEEK
@@ -461,10 +476,17 @@ export function NodesDashboard() {
                     <span>Replay {node.replay_count ?? 0}</span>
                     <span>Reconnect {node.reconnect_count ?? 0}</span>
                     <span>Preload {node.cache?.preload_state ?? "EMPTY"}</span>
+                    <span>
+                      Cache {node.cache?.cached_assets ?? 0}/{node.cache?.asset_total ?? 0} •{" "}
+                      {node.cache?.progress_assets_pct?.toFixed(0) ?? 0}%
+                    </span>
                   </div>
                   <div className="node-actions">
                     <span className={`drift-pill drift-${node.drift_level.toLowerCase()}`}>{node.drift_level}</span>
                     <span className="queue-depth-badge">Q {node.queue_depth ?? node.pending_commands}</span>
+                    <span className={`cache-pill cache-${(node.cache?.preload_state ?? "EMPTY").toLowerCase()}`}>
+                      {node.cache?.preload_state ?? "EMPTY"}
+                    </span>
                   </div>
                 </article>
               );

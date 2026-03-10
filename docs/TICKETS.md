@@ -697,6 +697,64 @@ Checks:
 Deliverable:
 - [x] branch + handoff note
 
+## SC-041 Preload Integration Reliability Tests
+
+Ticket: SC-041
+Scope: multi-node preload success/partial-failure/retry tests.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/tests/test_preload_reliability.py`
+Out of scope:
+- UI changes beyond SC-043
+Acceptance:
+- [x] multi-node preload success and partial-failure states covered
+- [x] retry with new request_id dispatches again
+Checks:
+- [x] `cd orchestration-server && python -m unittest discover -s tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-042 Play Gating by Preload Readiness
+
+Ticket: SC-042
+Scope: PLAY_AT rejected with reason code when target nodes not ready.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_play_at_preload_gate.py`
+Out of scope:
+- protocol major-version changes
+Acceptance:
+- [x] `PLAY_AT` rejects with `PLAY_AT_PRELOAD_NOT_READY` when any target node not READY
+- [x] `PLAY_AT` allowed when all targets READY for the show
+Checks:
+- [x] `cd orchestration-server && python -m unittest discover -s tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-043 Operator Preload Controls
+
+Ticket: SC-043
+Scope: preload action + per-node readiness in UI + actionable errors.
+Owner: lead-agent (this chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- orchestration runtime changes beyond SC-041/042
+Acceptance:
+- [x] operator can trigger preload for all nodes or selected targets
+- [x] node cards show cache lifecycle state and progress
+- [x] actionable preload errors surface through existing command result panel
+Checks:
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
 ## SC-035 Two-Node Sync Proof Test
 
 Ticket: SC-035

@@ -41,6 +41,27 @@ class TwoNodeSyncProofTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_two_nodes_receive_same_play_at_and_stay_within_slo(self) -> None:
         target_time_ms = int(time.time() * 1000) + 5_000
+        for node_id in ("node-a", "node-b"):
+            ready = await self.client.post(
+                f"/api/v1/nodes/{node_id}/heartbeat",
+                json={
+                    "version": "v1",
+                    "status": "READY",
+                    "show_id": "demo-show",
+                    "position_ms": 0,
+                    "drift_ms": 0.0,
+                    "metrics": {"cpu_pct": 10.0, "gpu_pct": 12.0, "fps": 60.0, "dropped_frames": 0},
+                    "cache": {
+                        "show_id": "demo-show",
+                        "preload_state": "READY",
+                        "asset_total": 0,
+                        "cached_assets": 0,
+                        "bytes_total": 0,
+                        "bytes_cached": 0,
+                    },
+                },
+            )
+            self.assertEqual(ready.status_code, 200, ready.text)
         response = await self.client.post(
             "/api/v1/shows/play_at",
             json={

@@ -45,6 +45,26 @@ class OrchestrationIdempotencyIntegrationTests(unittest.IsolatedAsyncioTestCase)
     async def test_play_at_request_id_replay_and_mismatch(self) -> None:
         request_id = "req-001"
         target_time_ms = int(time.time() * 1000) + 5_000
+        ready = await self.client.post(
+            "/api/v1/nodes/node-a/heartbeat",
+            json={
+                "version": "v1",
+                "status": "READY",
+                "show_id": "demo-show",
+                "position_ms": 0,
+                "drift_ms": 0.0,
+                "metrics": {"cpu_pct": 10.0, "gpu_pct": 12.0, "fps": 60.0, "dropped_frames": 0},
+                "cache": {
+                    "show_id": "demo-show",
+                    "preload_state": "READY",
+                    "asset_total": 0,
+                    "cached_assets": 0,
+                    "bytes_total": 0,
+                    "bytes_cached": 0,
+                },
+            },
+        )
+        self.assertEqual(ready.status_code, 200, ready.text)
         payload = {
             "show_id": "demo-show",
             "target_time_ms": target_time_ms,

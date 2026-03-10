@@ -73,11 +73,14 @@ class PreloadShowRequest(BaseModel):
 
 class NodeCacheStatus(BaseModel):
     show_id: str | None = None
-    preload_state: Literal["IDLE", "PRELOADING", "READY", "ERROR"] = "IDLE"
+    preload_state: Literal["EMPTY", "LOADING", "READY", "FAILED", "IDLE", "PRELOADING", "ERROR"] = "EMPTY"
     asset_total: int = Field(default=0, ge=0)
     cached_assets: int = Field(default=0, ge=0)
     bytes_total: int = Field(default=0, ge=0)
     bytes_cached: int = Field(default=0, ge=0)
+    progress_assets_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    progress_bytes_pct: float | None = Field(default=None, ge=0.0, le=100.0)
+    progress_message: str | None = None
     last_preload_request_id: str | None = None
 
 
