@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
-from .models import TimelineClip, TimelineShowSummary, TimelineSnapshotResponse, TimelineTrack
+from .models import MappingConfig, TimelineClip, TimelineShowSummary, TimelineSnapshotResponse, TimelineTrack
 
 
 class TimelineRepository:
@@ -29,15 +30,20 @@ class TimelineRepository:
             for row in rows
         ]
 
-    def upsert_show(self, show_id: str, duration_ms: int) -> None:
+    def upsert_show(self, show_id: str, duration_ms: int, mapping_config: dict[str, object] | None = None) -> None:
+        mapping_json = None
+        if mapping_config is not None:
+            mapping_json = json.dumps(mapping_config, separators=(",", ":"), sort_keys=True)
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO shows(show_id, duration_ms)
-                VALUES(?, ?)
-                ON CONFLICT(show_id) DO UPDATE SET duration_ms = excluded.duration_ms
+                INSERT INTO shows(show_id, duration_ms, mapping_config_json)
+                VALUES(?, ?, ?)
+                ON CONFLICT(show_id) DO UPDATE SET
+                  duration_ms = excluded.duration_ms,
+                  mapping_config_json = COALESCE(excluded.mapping_config_json, mapping_config_json)
                 """,
-                (show_id, duration_ms),
+                (show_id, duration_ms, mapping_json),
             )
             conn.commit()
 
@@ -49,6 +55,19 @@ class TimelineRepository:
             conn.commit()
         if deleted == 0:
             raise KeyError(f"Show not found: {show_id}")
+
+    def get_mapping_config(self, show_id: str) -> dict[str, object] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT mapping_config_json FROM shows WHERE show_id = ?",
+                (show_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Show not found: {show_id}")
+            raw = row["mapping_config_json"]
+            if not raw:
+                return None
+            return json.loads(raw)
 
     def upsert_track(self, show_id: str, track_id: str, label: str, kind: str, position: int | None) -> None:
         with self._connect() as conn:
@@ -120,7 +139,10 @@ class TimelineRepository:
 
     def snapshot(self, show_id: str, playhead_ms: int = 0) -> TimelineSnapshotResponse:
         with self._connect() as conn:
-            show = conn.execute("SELECT show_id, duration_ms FROM shows WHERE show_id = ?", (show_id,)).fetchone()
+            show = conn.execute(
+                "SELECT show_id, duration_ms, mapping_config_json FROM shows WHERE show_id = ?",
+                (show_id,),
+            ).fetchone()
             if show is None:
                 raise KeyError(f"Show not found: {show_id}")
 
@@ -165,11 +187,16 @@ class TimelineRepository:
                 )
 
             duration_ms = int(show["duration_ms"])
+            mapping_config = None
+            raw_mapping = show["mapping_config_json"]
+            if raw_mapping:
+                mapping_config = MappingConfig.model_validate(json.loads(raw_mapping))
             return TimelineSnapshotResponse(
                 show_id=show["show_id"],
                 duration_ms=duration_ms,
                 playhead_ms=max(0, min(playhead_ms, duration_ms)),
                 tracks=tracks,
+                mapping_config=mapping_config,
             )
 
     def _connect(self) -> sqlite3.Connection:
@@ -184,7 +211,8 @@ class TimelineRepository:
                 """
                 CREATE TABLE IF NOT EXISTS shows (
                   show_id TEXT PRIMARY KEY,
-                  duration_ms INTEGER NOT NULL CHECK(duration_ms > 0)
+                  duration_ms INTEGER NOT NULL CHECK(duration_ms > 0),
+                  mapping_config_json TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS tracks (
@@ -211,6 +239,9 @@ class TimelineRepository:
                 );
                 """
             )
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(shows)").fetchall()}
+            if "mapping_config_json" not in columns:
+                conn.execute("ALTER TABLE shows ADD COLUMN mapping_config_json TEXT")
             conn.commit()
 
     def _seed_demo_show(self) -> None:
@@ -254,4 +285,3 @@ class TimelineRepository:
             (show_id, track_id),
         ).fetchone()
         return int(row["max_pos"]) + 1
-

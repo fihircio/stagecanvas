@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from pathlib import Path
+from typing import Any, Callable, Literal
 
 from fastapi import WebSocket
 
@@ -56,6 +58,8 @@ class NodeRecord:
     queued_count: int = 0
     reconnect_count: int = 0
     ws_connect_count: int = 0
+    transfer_queue_depth: int = 0
+    transfer_worker_state: str = "IDLE"
     drift_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=DRIFT_HISTORY_MAXLEN))
     sustained_warn_samples: int = 0
     sustained_critical_samples: int = 0
@@ -168,6 +172,42 @@ class NodeRegistry:
         async with self._lock:
             return self._nodes.get(node_id)
 
+    async def update_transfer_queue_depth(self, node_id: str, depth: int) -> None:
+        async with self._lock:
+            record = self._nodes.get(node_id)
+            if record is None:
+                return
+            record.transfer_queue_depth = max(0, depth)
+
+    async def update_transfer_state(
+        self,
+        node_id: str,
+        cached_assets: int,
+        cached_bytes: int,
+        state: str,
+        message: str | None,
+    ) -> None:
+        async with self._lock:
+            record = self._nodes.get(node_id)
+            if record is None:
+                return
+            record.cache = {
+                **record.cache,
+                "cached_assets": max(0, cached_assets),
+                "bytes_cached": max(0, cached_bytes),
+                "preload_state": state,
+                "progress_assets_pct": record.cache.get("progress_assets_pct"),
+                "progress_bytes_pct": record.cache.get("progress_bytes_pct"),
+                "progress_message": message,
+            }
+
+    async def update_transfer_worker_state(self, node_id: str, state: str) -> None:
+        async with self._lock:
+            record = self._nodes.get(node_id)
+            if record is None:
+                return
+            record.transfer_worker_state = state
+
     async def get_drift_history(self, node_id: str) -> list[dict[str, Any]]:
         async with self._lock:
             record = self._nodes.get(node_id)
@@ -264,6 +304,8 @@ class NodeRegistry:
             "replay_count": record.replay_count,
             "queued_count": record.queued_count,
             "reconnect_count": record.reconnect_count,
+            "transfer_queue_depth": record.transfer_queue_depth,
+            "transfer_worker_state": record.transfer_worker_state,
             "cache": record.cache,
         }
 
@@ -354,9 +396,13 @@ class MediaAssetRecord:
 
 
 class MediaRegistry:
-    def __init__(self) -> None:
+    def __init__(self, storage_path: Path | None = None) -> None:
         self._assets: dict[str, MediaAssetRecord] = {}
         self._lock = asyncio.Lock()
+        self._storage_path = storage_path
+        if self._storage_path is not None:
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            self._load_from_disk()
 
     async def register(self, body: MediaAssetCreateRequest) -> tuple[MediaAssetRecord, bool, bool]:
         async with self._lock:
@@ -383,6 +429,7 @@ class MediaRegistry:
                 status=body.status,
             )
             self._assets[body.asset_id] = record
+            self._persist()
             return record, True, True
 
     async def list_assets(self) -> list[MediaAssetResponse]:
@@ -407,4 +454,112 @@ class MediaRegistry:
             if body.uri is not None:
                 record.uri = body.uri
             record.updated_at_ms = int(time.time() * 1000)
+            self._persist()
             return record
+
+    def _persist(self) -> None:
+        if self._storage_path is None:
+            return
+        payload = [asset.to_response().model_dump(mode="json") for asset in self._assets.values()]
+        tmp_path = self._storage_path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        tmp_path.replace(self._storage_path)
+
+    def _load_from_disk(self) -> None:
+        if self._storage_path is None or not self._storage_path.exists():
+            return
+        raw = json.loads(self._storage_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            return
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            record = MediaAssetRecord(
+                asset_id=str(item.get("asset_id", "")),
+                label=item.get("label"),
+                codec_profile=str(item.get("codec_profile", "")),
+                duration_ms=int(item.get("duration_ms", 0)),
+                size_bytes=int(item.get("size_bytes", 0)),
+                checksum=item.get("checksum"),
+                uri=item.get("uri"),
+                status=str(item.get("status", "REGISTERED")),
+                error_message=item.get("error_message"),
+                created_at_ms=int(item.get("created_at_ms", int(time.time() * 1000))),
+                updated_at_ms=int(item.get("updated_at_ms", int(time.time() * 1000))),
+            )
+            if record.asset_id:
+                self._assets[record.asset_id] = record
+
+
+@dataclass
+class TransferTask:
+    node_id: str
+    show_id: str
+    media_id: str
+    size_bytes: int
+    attempt: int = 0
+    max_retries: int = 3
+    backoff_ms: int = 200
+    next_run_ms: int = field(default_factory=lambda: int(time.time() * 1000))
+
+
+class AssetTransferWorker:
+    def __init__(
+        self,
+        registry: NodeRegistry,
+        handler: Callable[[TransferTask], bool] | None = None,
+    ) -> None:
+        self._registry = registry
+        self._handler = handler or (lambda _: True)
+        self._queue: list[TransferTask] = []
+
+    def enqueue(self, task: TransferTask) -> None:
+        self._queue.append(task)
+
+    def pending_count(self) -> int:
+        return len(self._queue)
+
+    async def run_once(self, now_ms: int | None = None) -> bool:
+        if not self._queue:
+            return False
+        now = now_ms if now_ms is not None else int(time.time() * 1000)
+        task = next((t for t in self._queue if t.next_run_ms <= now), None)
+        if task is None:
+            return False
+
+        await self._registry.update_transfer_worker_state(task.node_id, "RUNNING")
+        success = self._handler(task)
+        if success:
+            self._queue.remove(task)
+            await self._registry.update_transfer_queue_depth(task.node_id, self.pending_count())
+            record = await self._registry.get(task.node_id)
+            if record is not None:
+                cached_assets = int(record.cache.get("cached_assets", 0)) + 1
+                cached_bytes = int(record.cache.get("bytes_cached", 0)) + task.size_bytes
+                total_assets = int(record.cache.get("asset_total", 0))
+                total_bytes = int(record.cache.get("bytes_total", 0))
+                state = "READY" if cached_assets >= total_assets else "LOADING"
+                await self._registry.update_transfer_state(
+                    task.node_id,
+                    cached_assets=cached_assets,
+                    cached_bytes=cached_bytes,
+                    state=state,
+                    message="transfer",
+                )
+        else:
+            task.attempt += 1
+            if task.attempt > task.max_retries:
+                self._queue.remove(task)
+                await self._registry.update_transfer_queue_depth(task.node_id, self.pending_count())
+                await self._registry.update_transfer_state(
+                    task.node_id,
+                    cached_assets=0,
+                    cached_bytes=0,
+                    state="FAILED",
+                    message="transfer_failed",
+                )
+            else:
+                backoff = task.backoff_ms * (2 ** (task.attempt - 1))
+                task.next_run_ms = now + backoff
+        await self._registry.update_transfer_worker_state(task.node_id, "IDLE")
+        return True

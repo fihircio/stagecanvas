@@ -1053,14 +1053,14 @@ Out of scope:
 - real object storage integration
 - UI ingestion workflow
 Acceptance:
-- [ ] registry persists media entries to a local storage stub
-- [ ] entries survive process restart in tests
-- [ ] API returns consistent metadata after reload
+ [x] registry persists media entries to a local storage stub
+ [x] entries survive process restart in tests
+ [x] API returns consistent metadata after reload
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-054 Asset Transfer Worker Stub
 
@@ -1076,14 +1076,14 @@ Out of scope:
 - actual file transfer implementation
 - UI changes
 Acceptance:
-- [ ] transfer requests are queued and processed asynchronously
-- [ ] retries apply with bounded backoff on simulated failures
-- [ ] worker status is observable via snapshots or logs
+ [x] transfer requests are queued and processed asynchronously
+ [x] retries apply with bounded backoff on simulated failures
+ [x] worker status is observable via snapshots or logs
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-055 Render Node Media Cache Index
 
@@ -1125,15 +1125,15 @@ Out of scope:
 - real shader/mesh processing
 - UI mapping editor
 Acceptance:
-- [ ] mapping config flows from show update to node load to bridge `set_mapping`
-- [ ] invalid mapping config rejected with reason code
-- [ ] tests cover success and failure propagation
+ [x] mapping config flows from show update to node load to bridge `set_mapping`
+ [x] invalid mapping config rejected with reason code
+ [x] tests cover success and failure propagation
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-057 Preview Pipeline Stub
 
@@ -1219,15 +1219,15 @@ Out of scope:
 - real codec integration
 - GPU pipeline implementation
 Acceptance:
-- [ ] playback stub starts at `PLAY_AT` target time and emits frame ticks
-- [ ] pause/stop affect stub state deterministically
-- [ ] tests cover timing offset and stop behavior
+ [x] playback stub starts at `PLAY_AT` target time and emits frame ticks
+ [x] pause/stop affect stub state deterministically
+ [x] tests cover timing offset and stop behavior
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+ [x] `make render-compile`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-061 Control UI Dark Mode
 
