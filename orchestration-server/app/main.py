@@ -1,22 +1,28 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from contextlib import suppress
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import MIN_PLAY_AT_LEAD_MS, PROTOCOL_VERSION
 from .models import (
     ControlCommand,
     HeartbeatRequest,
+    PreviewImageRequest,
     PreviewSnapshotRequest,
     MappingConfig,
     MediaAssetCreateRequest,
     MediaAssetUpdateRequest,
+    TranscodeJobCreateRequest,
+    TranscodeJobUpdateRequest,
     AssetTransferRequest,
     OperatorCommandRequest,
     PreloadShowRequest,
@@ -29,15 +35,24 @@ from .models import (
     TimelineUpsertTrackRequest,
 )
 from .command_ledger import CommandLedger
-from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask
+from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask, TranscodeQueue
 from .timeline_repository import TimelineRepository
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
+MEDIA_STORAGE_DIR = Path(__file__).resolve().parent.parent / "data" / "media"
+RENDER_CACHE_DIR = Path(__file__).resolve().parents[2] / "render-node" / "data" / "cache"
 media_registry = MediaRegistry(Path(__file__).resolve().parent.parent / "data" / "media_registry.json")
-transfer_worker = AssetTransferWorker(registry)
+transcode_queue = TranscodeQueue()
+transfer_worker = AssetTransferWorker(
+    registry,
+    media_registry=media_registry,
+    media_root=MEDIA_STORAGE_DIR,
+    cache_root=RENDER_CACHE_DIR,
+)
 timeline_repo = TimelineRepository(Path(__file__).resolve().parent.parent / "data" / "timeline.db")
 command_ledger = CommandLedger(Path(__file__).resolve().parent.parent / "data" / "orchestration.db")
+preview_image_last_request: dict[str, int] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,6 +151,25 @@ async def preview_snapshot(body: PreviewSnapshotRequest) -> dict[str, object]:
     return {"ok": True, "requested_count": len(target_ids), "snapshots": snapshots}
 
 
+@app.post("/api/v1/preview/image")
+async def preview_image(body: PreviewImageRequest) -> dict[str, object]:
+    target_ids = body.node_ids or await registry.active_node_ids()
+    now_ms = int(time.time() * 1000)
+    images: list[dict[str, object]] = []
+    for node_id in target_ids:
+        preview_image_last_request[node_id] = now_ms
+        images.append(
+            {
+                "node_id": node_id,
+                "timestamp_ms": now_ms,
+                "width": body.width,
+                "height": body.height,
+                "image_data": "data:image/png;base64,stub",
+            }
+        )
+    return {"ok": True, "requested_count": len(target_ids), "images": images}
+
+
 @app.post("/api/v1/media")
 async def register_media_asset(body: MediaAssetCreateRequest) -> dict[str, object]:
     record, is_new, idempotent = await media_registry.register(body)
@@ -170,6 +204,103 @@ async def update_media_asset(asset_id: str, body: MediaAssetUpdateRequest) -> di
     if record is None:
         raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
     return {"ok": True, "asset": record.to_response().model_dump(mode="json")}
+
+
+@app.post("/api/v1/media/{asset_id}/transcode")
+async def enqueue_transcode_job(asset_id: str, body: TranscodeJobCreateRequest) -> dict[str, object]:
+    record = await media_registry.get(asset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
+    job = await transcode_queue.enqueue(asset_id=asset_id, target_profile=body.target_profile)
+    return {"ok": True, "job": job.to_response().model_dump(mode="json")}
+
+
+@app.get("/api/v1/transcode/jobs")
+async def list_transcode_jobs() -> dict[str, object]:
+    jobs = await transcode_queue.list_jobs()
+    return {"jobs": [job.model_dump(mode="json") for job in jobs]}
+
+
+@app.get("/api/v1/transcode/jobs/{job_id}")
+async def get_transcode_job(job_id: str) -> dict[str, object]:
+    job = await transcode_queue.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Transcode job not found: {job_id}")
+    return {"job": job.to_response().model_dump(mode="json")}
+
+
+@app.patch("/api/v1/transcode/jobs/{job_id}")
+async def update_transcode_job(job_id: str, body: TranscodeJobUpdateRequest) -> dict[str, object]:
+    job = await transcode_queue.update(job_id, status=body.status, error_message=body.error_message)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Transcode job not found: {job_id}")
+    return {"ok": True, "job": job.to_response().model_dump(mode="json")}
+
+
+@app.post("/api/v1/media/upload")
+async def upload_media_asset(request: Request) -> dict[str, object]:
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" not in content_type:
+        raise HTTPException(
+            status_code=415,
+            detail={"reason_code": "UNSUPPORTED_MEDIA_TYPE", "message": "Expected multipart/form-data upload."},
+        )
+    fields, upload = _parse_multipart_formdata(content_type, await request.body())
+    asset_id = fields.get("asset_id")
+    codec_profile = fields.get("codec_profile")
+    duration_ms_raw = fields.get("duration_ms", "0")
+    label = fields.get("label")
+    if not asset_id or not codec_profile or upload is None:
+        raise HTTPException(
+            status_code=400,
+            detail={"reason_code": "MISSING_FIELDS", "message": "asset_id, codec_profile, and file are required."},
+        )
+    filename, file_bytes = upload
+    if not filename:
+        raise HTTPException(
+            status_code=400,
+            detail={"reason_code": "MISSING_FILENAME", "message": "Uploaded file must include a filename."},
+        )
+
+    MEDIA_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(filename).name
+    target_path = MEDIA_STORAGE_DIR / f"{asset_id}_{safe_name}"
+
+    hasher = hashlib.sha256()
+    hasher.update(file_bytes)
+    size_bytes = len(file_bytes)
+    with target_path.open("wb") as handle:
+        handle.write(file_bytes)
+
+    checksum = hasher.hexdigest()
+    try:
+        request = MediaAssetCreateRequest(
+            asset_id=asset_id,
+            label=label or safe_name,
+            codec_profile=codec_profile,
+            duration_ms=max(0, int(duration_ms_raw)),
+            size_bytes=size_bytes,
+            checksum=checksum,
+            uri=f"file://{target_path}",
+            status="READY",
+        )
+    except Exception as exc:
+        if "UNSUPPORTED_CODEC_PROFILE" in str(exc):
+            raise HTTPException(
+                status_code=422,
+                detail={"reason_code": "UNSUPPORTED_CODEC_PROFILE", "message": str(exc)},
+            ) from exc
+        raise
+    record, is_new, idempotent = await media_registry.register(request)
+    if not idempotent:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason_code": "ASSET_ID_MISMATCH",
+                "message": "Asset ID already exists with different metadata.",
+            },
+        )
+    return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "idempotent": not is_new}
 
 
 @app.get("/api/v1/slo")
@@ -675,6 +806,24 @@ async def operator_socket(ws: WebSocket) -> None:
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         return
+
+
+def _parse_multipart_formdata(content_type: str, body: bytes) -> tuple[dict[str, str], tuple[str, bytes] | None]:
+    header = f"Content-Type: {content_type}\r\n\r\n".encode("utf-8")
+    message = BytesParser(policy=default).parsebytes(header + body)
+    fields: dict[str, str] = {}
+    upload: tuple[str, bytes] | None = None
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        filename = part.get_param("filename", header="content-disposition")
+        payload = part.get_payload(decode=True) or b""
+        if filename is not None:
+            upload = (filename, payload)
+        elif name is not None:
+            fields[name] = payload.decode("utf-8")
+    return fields, upload
 
 
 def _idempotent_begin_or_raise(

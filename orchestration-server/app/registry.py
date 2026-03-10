@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import shutil
+import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +25,7 @@ from .models import (
     MediaAssetCreateRequest,
     MediaAssetResponse,
     MediaAssetUpdateRequest,
+    TranscodeJobResponse,
     NodeStatus,
     RegisterNodeRequest,
 )
@@ -492,6 +495,61 @@ class MediaRegistry:
 
 
 @dataclass
+class TranscodeJobRecord:
+    job_id: str
+    asset_id: str
+    target_profile: str
+    status: str = "QUEUED"
+    error_message: str | None = None
+    created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
+    updated_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
+
+    def to_response(self) -> TranscodeJobResponse:
+        return TranscodeJobResponse(
+            job_id=self.job_id,
+            asset_id=self.asset_id,
+            target_profile=self.target_profile,
+            status=self.status,
+            error_message=self.error_message,
+            created_at_ms=self.created_at_ms,
+            updated_at_ms=self.updated_at_ms,
+        )
+
+
+class TranscodeQueue:
+    def __init__(self) -> None:
+        self._jobs: dict[str, TranscodeJobRecord] = {}
+        self._lock = asyncio.Lock()
+
+    async def enqueue(self, asset_id: str, target_profile: str) -> TranscodeJobRecord:
+        async with self._lock:
+            job_id = str(uuid.uuid4())
+            record = TranscodeJobRecord(job_id=job_id, asset_id=asset_id, target_profile=target_profile)
+            self._jobs[job_id] = record
+            return record
+
+    async def get(self, job_id: str) -> TranscodeJobRecord | None:
+        async with self._lock:
+            return self._jobs.get(job_id)
+
+    async def list_jobs(self) -> list[TranscodeJobResponse]:
+        async with self._lock:
+            return [job.to_response() for job in self._jobs.values()]
+
+    async def update(self, job_id: str, status: str | None, error_message: str | None) -> TranscodeJobRecord | None:
+        async with self._lock:
+            record = self._jobs.get(job_id)
+            if record is None:
+                return None
+            if status is not None:
+                record.status = status
+            if error_message is not None:
+                record.error_message = error_message
+            record.updated_at_ms = int(time.time() * 1000)
+            return record
+
+
+@dataclass
 class TransferTask:
     node_id: str
     show_id: str
@@ -507,10 +565,16 @@ class AssetTransferWorker:
     def __init__(
         self,
         registry: NodeRegistry,
+        media_registry: MediaRegistry | None = None,
+        media_root: Path | None = None,
+        cache_root: Path | None = None,
         handler: Callable[[TransferTask], bool] | None = None,
     ) -> None:
         self._registry = registry
-        self._handler = handler or (lambda _: True)
+        self._media_registry = media_registry
+        self._media_root = media_root
+        self._cache_root = cache_root
+        self._handler = handler
         self._queue: list[TransferTask] = []
 
     def enqueue(self, task: TransferTask) -> None:
@@ -528,7 +592,10 @@ class AssetTransferWorker:
             return False
 
         await self._registry.update_transfer_worker_state(task.node_id, "RUNNING")
-        success = self._handler(task)
+        if self._handler is not None:
+            success = self._handler(task)
+        else:
+            success = await self._copy_media_asset(task)
         if success:
             self._queue.remove(task)
             await self._registry.update_transfer_queue_depth(task.node_id, self.pending_count())
@@ -563,3 +630,29 @@ class AssetTransferWorker:
                 task.next_run_ms = now + backoff
         await self._registry.update_transfer_worker_state(task.node_id, "IDLE")
         return True
+
+    async def _copy_media_asset(self, task: TransferTask) -> bool:
+        if self._media_registry is None or self._media_root is None or self._cache_root is None:
+            return True
+        record = await self._media_registry.get(task.media_id)
+        if record is None:
+            return False
+        source = self._resolve_media_path(record)
+        if source is None or not source.exists():
+            return False
+        dest_dir = self._cache_root / task.node_id
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / source.name
+        shutil.copy2(source, dest)
+        if task.size_bytes <= 0:
+            task.size_bytes = dest.stat().st_size
+        return True
+
+    def _resolve_media_path(self, record: MediaAssetRecord) -> Path | None:
+        if record.uri:
+            if record.uri.startswith("file://"):
+                return Path(record.uri[7:])
+            return Path(record.uri)
+        if self._media_root is None:
+            return None
+        return self._media_root / record.asset_id
