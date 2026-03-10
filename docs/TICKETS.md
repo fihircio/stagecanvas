@@ -1037,3 +1037,194 @@ Checks:
 - [ ] `make sanity`
 Deliverable:
 - [x] branch + handoff note
+
+## SC-053 Media Ingest Storage Wiring
+
+Ticket: SC-053
+Scope: wire media registry persistence to local filesystem storage stub.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_media_storage_stub.py`
+- docs tied to these files
+Out of scope:
+- real object storage integration
+- UI ingestion workflow
+Acceptance:
+- [ ] registry persists media entries to a local storage stub
+- [ ] entries survive process restart in tests
+- [ ] API returns consistent metadata after reload
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-054 Asset Transfer Worker Stub
+
+Ticket: SC-054
+Scope: add async transfer queue worker with retry/backoff (no real file copy yet).
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_asset_transfer_worker.py`
+- docs tied to these files
+Out of scope:
+- actual file transfer implementation
+- UI changes
+Acceptance:
+- [ ] transfer requests are queued and processed asynchronously
+- [ ] retries apply with bounded backoff on simulated failures
+- [ ] worker status is observable via snapshots or logs
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-055 Render Node Media Cache Index
+
+Ticket: SC-055
+Scope: add cache index and eviction policy stub on render-node.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/state.py`
+- `render-node/tests/test_cache_index.py`
+- `render-node/README.md`
+Out of scope:
+- real media decoding
+- filesystem storage implementation
+Acceptance:
+- [ ] cache index tracks assets with size/last-access metadata
+- [ ] eviction policy removes least-recently-used entries when over limit
+- [ ] tests cover eviction order and capacity enforcement
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-056 Mapping Config End-to-End Application
+
+Ticket: SC-056
+Scope: propagate mapping config from orchestration to render-node bridge and validate application path.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_mapping_config_flow.py`
+- `render-node/app/state.py`
+- `render-node/app/bridge.py`
+- `render-node/tests/test_mapping_config_flow.py`
+- docs tied to these files
+Out of scope:
+- real shader/mesh processing
+- UI mapping editor
+Acceptance:
+- [ ] mapping config flows from show update to node load to bridge `set_mapping`
+- [ ] invalid mapping config rejected with reason code
+- [ ] tests cover success and failure propagation
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-057 Preview Pipeline Stub
+
+Ticket: SC-057
+Scope: add preview pipeline stub (UI trigger -> orchestration -> node snapshot response).
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_preview_pipeline_stub.py`
+- docs tied to these files
+Out of scope:
+- actual image/video preview rendering
+- UI design overhaul
+Acceptance:
+- [ ] UI can request a preview snapshot
+- [ ] orchestration returns stub response with node id + timestamp
+- [ ] tests cover request/response contract
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-058 Timeline Editor Drag/Reorder + Snapping Basics
+
+Ticket: SC-058
+Scope: add basic drag/reorder and snapping controls to timeline editor.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/app/globals.css`
+- `control-ui/lib/types.ts`
+Out of scope:
+- advanced multi-track selection
+- audio/effects lanes
+Acceptance:
+- [ ] track and clip order can be rearranged via simple drag controls
+- [ ] snapping toggle exists and affects UI ordering actions
+- [ ] UI updates without requiring full page refresh
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-059 Mapping UI Stub
+
+Ticket: SC-059
+Scope: add minimal mapping config load/save UI stub.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- visual mesh editor
+- image preview overlays
+Acceptance:
+- [ ] operator can load/save mapping config JSON via modal or panel
+- [ ] validation errors surface from orchestration responses
+- [ ] config is sent with show update endpoints
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-060 Render-Node Video Playback Stub
+
+Ticket: SC-060
+Scope: add mock decoder playback loop tied to `PLAY_AT` timing.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/state.py`
+- `render-node/app/agent.py`
+- `render-node/tests/test_playback_stub.py`
+- `render-node/README.md`
+Out of scope:
+- real codec integration
+- GPU pipeline implementation
+Acceptance:
+- [ ] playback stub starts at `PLAY_AT` target time and emits frame ticks
+- [ ] pause/stop affect stub state deterministically
+- [ ] tests cover timing offset and stop behavior
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
