@@ -12,7 +12,7 @@ from typing import Any, cast
 import httpx
 import websockets
 
-from .bridge import MockUnityBridge, NullRendererBridge, RendererBridge
+from .bridge import Decoder, MockUnityBridge, NullDecoder, NullRendererBridge, RendererBridge
 from .state import CommandType, NodeState
 
 SUPPORTED_COMMANDS: set[str] = {"LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"}
@@ -33,6 +33,7 @@ class RenderNodeAgent:
         label: str,
         outputs: int = 1,
         bridge: RendererBridge | None = None,
+        decoder: Decoder | None = None,
         log_state_every_sec: float = 0.0,
         heartbeat_interval_sec: float = 1.0,
         tick_interval_sec: float = 0.2,
@@ -59,7 +60,8 @@ class RenderNodeAgent:
         self.warn_rate_window_sec = max(1.0, warn_rate_window_sec)
         self.warn_rate_burst = max(1, warn_rate_burst)
         self.bridge = bridge or NullRendererBridge()
-        self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge)
+        self.decoder = decoder or NullDecoder()
+        self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge, decoder=self.decoder)
         self._client = httpx.AsyncClient(timeout=5.0)
         self._stop_event = asyncio.Event()
         self._ws_connected = False
@@ -345,6 +347,7 @@ class RenderNodeAgent:
         self._stop_event.set()
         await self._client.aclose()
         await self.bridge.close()
+        await self.decoder.close()
 
 
 async def main() -> None:

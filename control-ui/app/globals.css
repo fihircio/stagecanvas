@@ -365,6 +365,60 @@ body {
   gap: 8px;
 }
 
+[data-theme="dark"] .mapping-panel {
+  background: #0f1c33;
+}
+
+.mapping-output-list {
+  display: grid;
+  gap: 10px;
+}
+
+.mapping-output-card {
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+[data-theme="dark"] .mapping-output-card {
+  background: #0b1629;
+}
+
+.mapping-output-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.mapping-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.mapping-grid label,
+.mapping-blend label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.mapping-blend {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.mapping-json {
+  display: grid;
+  gap: 6px;
+}
+
 .mapping-textarea {
   border: 1px solid var(--line);
   border-radius: 4px;

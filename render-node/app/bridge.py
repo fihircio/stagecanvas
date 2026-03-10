@@ -39,6 +39,28 @@ class RendererBridge(ABC):
     async def close(self) -> None: ...
 
 
+class Decoder(ABC):
+    @abstractmethod
+    async def load_show(self, show_id: str, payload: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None: ...
+
+    @abstractmethod
+    async def close(self) -> None: ...
+
+
+class NullDecoder(Decoder):
+    async def load_show(self, show_id: str, payload: dict[str, Any]) -> None:
+        return
+
+    async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:
+        return
+
+    async def close(self) -> None:
+        return
+
+
 class NullRendererBridge(RendererBridge):
     async def connect(self, node_id: str, label: str) -> None:
         return

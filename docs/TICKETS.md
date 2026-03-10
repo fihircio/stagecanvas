@@ -1386,15 +1386,15 @@ Out of scope:
 - GPU decoding
 - real codec integration
 Acceptance:
-- [ ] playback path calls decoder stub on `LOAD_SHOW` and `PLAY_AT`
-- [ ] decoder errors propagate to node state (`ERROR`)
-- [ ] tests cover success and failure paths
+- [x] playback path calls decoder stub on `LOAD_SHOW` and `PLAY_AT`
+- [x] decoder errors propagate to node state (`ERROR`)
+- [x] tests cover success and failure paths
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-068 Transcoding Queue Stub
 
@@ -1411,14 +1411,14 @@ Out of scope:
 - real transcoding pipeline
 - UI workflow
 Acceptance:
-- [ ] media registry can enqueue a transcode job for an asset/profile
-- [ ] job status transitions are persisted in memory (queued/running/done/failed)
-- [ ] tests validate enqueue + status update + query
+- [x] media registry can enqueue a transcode job for an asset/profile
+- [x] job status transitions are persisted in memory (queued/running/done/failed)
+- [x] tests validate enqueue + status update + query
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-069 Mapping UI Editor v1
 
@@ -1433,14 +1433,14 @@ Out of scope:
 - drag mesh editor
 - live preview overlays
 Acceptance:
-- [ ] operator can edit per-output mapping params in a form
-- [ ] save sends mapping config to orchestration show update
-- [ ] validation errors display inline
+- [x] operator can edit per-output mapping params in a form
+- [x] save sends mapping config to orchestration show update
+- [x] validation errors display inline
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-070 Preview Image Pipeline Stub
 
@@ -1458,15 +1458,15 @@ Out of scope:
 - real image rendering
 - binary transfer optimization
 Acceptance:
-- [ ] UI can request a preview image and receives a stub payload
-- [ ] orchestration records last preview request time per node
-- [ ] tests validate request/response contract
+- [x] UI can request a preview image and receives a stub payload
+- [x] orchestration records last preview request time per node
+- [x] tests validate request/response contract
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-071 Time Sync Abstraction
 

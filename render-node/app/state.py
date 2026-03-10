@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from .bridge import NullRendererBridge, RendererBridge
+from .bridge import Decoder, NullDecoder, NullRendererBridge, RendererBridge
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
 CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
@@ -131,6 +131,7 @@ class NodeState:
     playback_frames_emitted: int = 0
     playback_started_ms: int | None = None
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
+    decoder: Decoder = field(default_factory=NullDecoder)
     command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -168,6 +169,7 @@ class NodeState:
     ) -> None:
         payload = payload or {}
         bridge_call: tuple[str, dict[str, Any]] | None = None
+        decoder_call: tuple[str, dict[str, Any]] | None = None
         history = {
             "at_ms": int(time.time() * 1000),
             "seq": seq,
@@ -187,6 +189,7 @@ class NodeState:
             if command == "LOAD_SHOW":
                 self.show_id = str(payload.get("show_id", self.show_id or "demo-show"))
                 bridge_call = ("load_show", {"show_id": self.show_id, "payload": payload})
+                decoder_call = ("load_show", {"show_id": self.show_id, "payload": payload})
                 mapping_config = payload.get("mapping_config")
                 if isinstance(mapping_config, dict):
                     self.mapping_config = mapping_config
@@ -288,6 +291,10 @@ class NodeState:
                     "play_at",
                     {"show_id": self.show_id, "target_time_ms": target_time_ms, "payload": payload},
                 )
+                decoder_call = (
+                    "play_at",
+                    {"show_id": self.show_id, "target_time_ms": target_time_ms, "payload": payload},
+                )
             elif command == "PAUSE":
                 self.status = "PAUSED"
                 self.scheduled_play_time_ms = None
@@ -311,6 +318,17 @@ class NodeState:
             return
 
         try:
+            decoder_failed = False
+            if decoder_call is not None:
+                try:
+                    name, args = decoder_call
+                    if name == "load_show":
+                        await self.decoder.load_show(args["show_id"], args["payload"])
+                    elif name == "play_at":
+                        await self.decoder.play_at(args["show_id"], args["target_time_ms"], args["payload"])
+                except Exception:
+                    decoder_failed = True
+                    raise
             if self.mapping_config is not None:
                 await self.bridge.set_mapping(self.mapping_config)
             name, args = bridge_call
@@ -329,6 +347,8 @@ class NodeState:
             history["detail"] = "applied"
         except Exception as exc:
             history["status"] = "error"
+            if history["reason_code"] is None:
+                history["reason_code"] = "DECODER_ERROR" if decoder_failed else "BRIDGE_ERROR"
             history["detail"] = str(exc)[:200]
             async with self._lock:
                 self.status = "ERROR"
