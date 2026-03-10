@@ -15,6 +15,8 @@ import websockets
 from .bridge import Decoder, MockUnityBridge, NullDecoder, NullRendererBridge, RendererBridge
 from .renderer_gpu import WebGPURendererBridge
 from .decoder_webcodecs import WebCodecsDecoder
+from .output.webrtc_stream import WebRTCStreamer
+from .sync_genlock import GenlockSync
 from .state import CommandType, NodeState
 
 SUPPORTED_COMMANDS: set[str] = {"LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"}
@@ -80,6 +82,7 @@ class RenderNodeAgent:
         warn_rate_burst: int = 3,
         time_sync_source: Literal["system", "ntp", "ptp"] = "system",
         time_sync_offset_ms: float = 0.0,
+        webrtc_port: int = 0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.node_id = node_id
@@ -97,7 +100,10 @@ class RenderNodeAgent:
         self.warn_rate_burst = max(1, warn_rate_burst)
         self.bridge = bridge or NullRendererBridge()
         self.decoder = decoder or NullDecoder()
-        self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge, decoder=self.decoder)
+        self.genlock = GenlockSync()
+        self.webrtc = WebRTCStreamer()
+        self.webrtc_port = webrtc_port
+        self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge, decoder=self.decoder, genlock=self.genlock)
         self.time_sync_source = time_sync_source
         self._time_sync_clock = TimeSyncClock.from_source(time_sync_source, time_sync_offset_ms)
         self._client = httpx.AsyncClient(timeout=5.0)
@@ -227,6 +233,10 @@ class RenderNodeAgent:
         while not self._stop_event.is_set():
             system_now_ms = time.time() * 1000
             dt_ms = system_now_ms - last_system_ms
+            
+            # Genlock wait
+            await self.genlock.wait_for_pulse()
+            
             await self.state.tick(max(0, dt_ms))
             last_system_ms = system_now_ms
             
@@ -370,8 +380,40 @@ class RenderNodeAgent:
             if await self._sleep_or_stop(self.log_state_every_sec):
                 return
 
+    async def run_signaling_server(self) -> None:
+        if self.webrtc_port <= 0:
+            return
+            
+        from aiohttp import web
+        
+        async def handle_offer(request):
+            params = await request.json()
+            pc = await self.webrtc.create_offer()
+            await self.webrtc.handle_answer(pc, params["sdp"], params["type"])
+            return web.json_response({
+                "sdp": pc.localDescription.sdp,
+                "type": pc.localDescription.type
+            })
+
+        app = web.Application()
+        app.router.add_post("/offer", handle_offer)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", self.webrtc_port)
+        await site.start()
+        
+        self._log("info", f"webrtc_signaling_server started on port {self.webrtc_port}")
+        
+        try:
+            while not self._stop_event.is_set():
+                await asyncio.sleep(1)
+        finally:
+            await runner.cleanup()
+
     async def run(self) -> None:
         await self.bridge.connect(self.node_id, self.label)
+        self.webrtc.start()
         await self.register_with_retry()
         if self._stop_event.is_set():
             return
@@ -381,6 +423,7 @@ class RenderNodeAgent:
             asyncio.create_task(self.playback_loop()),
             asyncio.create_task(self.ws_command_loop()),
             asyncio.create_task(self.diagnostics_loop()),
+            asyncio.create_task(self.run_signaling_server()),
         ]
         try:
             if self.max_runtime_sec > 0:
@@ -468,6 +511,12 @@ async def main() -> None:
         default=0.0,
         help="Override time sync offset (ms) for ntp/ptp stub.",
     )
+    parser.add_argument(
+        "--webrtc-port",
+        type=int,
+        default=0,
+        help="Port for WebRTC signaling server (0 to disable).",
+    )
     args = parser.parse_args()
 
     bridge: RendererBridge
@@ -503,10 +552,12 @@ async def main() -> None:
         warn_rate_burst=args.warn_rate_burst,
         time_sync_source=args.time_sync_source,
         time_sync_offset_ms=args.time_sync_offset_ms,
+        webrtc_port=args.webrtc_port,
     )
     try:
         await agent.run()
     finally:
+        await agent.webrtc.stop()
         await agent.close()
 
 

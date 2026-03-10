@@ -1,6 +1,6 @@
 import asyncio
 import struct
-from typing import Callable, Awaitable
+from typing import Any, Callable, Awaitable
 
 class ArtNetServer:
     """
@@ -71,30 +71,74 @@ class ArtNetProtocol(asyncio.DatagramProtocol):
 # ... repeats for each layer
 
 class ArtNetToLayerMapper:
-    def __init__(self, update_callback: Callable[[list[dict[str, Any]]], Awaitable[None]]):
+    def __init__(self, update_callback: Callable[[list[dict[str, Any]]], Awaitable[None]], fixtures_path: str = "shared-protocol/fixtures.json"):
         self.update_callback = update_callback
+        self.fixtures_path = fixtures_path
+        self.profiles = {}
+        self.assignments = []
+        self._load_fixtures()
+
+    def _load_fixtures(self):
+        try:
+            import json
+            import os
+            # Support absolute or relative to CWD
+            path = self.fixtures_path
+            if not os.path.isabs(path):
+                # Try relative to the app root or project root
+                pass # Already using relative to project root in default
+
+            with open(path, 'r') as f:
+                config = json.load(f)
+                self.profiles = {p["profile_name"]: p for p in config.get("profiles", [])}
+                self.assignments = config.get("assignments", [])
+                print(f"[ArtNet] Loaded {len(self.profiles)} profiles and {len(self.assignments)} assignments.")
+        except Exception as e:
+            print(f"[ArtNet] Error loading fixtures: {e}")
 
     async def handle_dmx(self, universe: int, length: int, data: bytes):
-        if universe != 0:
-            return
-        
-        # We assume 10 channels per layer for future expansion
-        CHANNELS_PER_LAYER = 10
         layers_to_update = []
 
-        for i in range(min(10, length // CHANNELS_PER_LAYER)):
-            base = i * CHANNELS_PER_LAYER
+        for assign in self.assignments:
+            if assign["universe"] != universe:
+                continue
             
-            opacity = data[base] / 255.0
-            speed = (data[base + 1] / 127.5) # 0.0 to 2.0
-            play_pause = data[base + 2]
-            
-            layers_to_update.append({
-                "layer_index": i,
-                "opacity": opacity,
-                "speed": speed,
-                "play_state": "playing" if play_pause >= 128 else "paused"
-            })
+            profile = self.profiles.get(assign["profile_name"])
+            if not profile:
+                continue
+
+            channels_per_fixture = profile["channels_per_fixture"]
+            mapping = profile["mapping"]
+            start_address = assign["start_address"] - 1 # 0-indexed
+            count = assign["count"]
+
+            for i in range(count):
+                base = start_address + (i * channels_per_fixture)
+                if base + channels_per_fixture > length:
+                    break
+                
+                layer_patch = {"layer_index": i}
+                
+                for offset_str, param in mapping.items():
+                    offset = int(offset_str)
+                    val = data[base + offset]
+                    
+                    if param == "opacity":
+                        layer_patch["opacity"] = val / 255.0
+                    elif param == "speed":
+                        layer_patch["speed"] = val / 127.5
+                    elif param == "play_state":
+                        layer_patch["play_state"] = "playing" if val >= 128 else "paused"
+                    elif param == "transform_x":
+                        layer_patch["transform_x"] = (val / 255.0) * 2.0 - 1.0 # -1 to 1
+                    elif param == "transform_y":
+                        layer_patch["transform_y"] = (val / 255.0) * 2.0 - 1.0 # -1 to 1
+                    elif param == "scale_x":
+                        layer_patch["scale_x"] = (val / 255.0) * 2.0
+                    elif param == "scale_y":
+                        layer_patch["scale_y"] = (val / 255.0) * 2.0
+                
+                layers_to_update.append(layer_patch)
         
         if layers_to_update:
             await self.update_callback(layers_to_update)

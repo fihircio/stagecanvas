@@ -1,0 +1,26 @@
+{
+    "profiles": [
+        {
+            "profile_name": "StageCanvas-Standard-Layer",
+            "channels_per_fixture": 10,
+            "mapping": {
+                "0": "opacity",
+                "1": "speed",
+                "2": "play_state",
+                "3": "transform_x",
+                "4": "transform_y",
+                "5": "scale_x",
+                "6": "scale_y",
+                "7": "blend_mode"
+            }
+        }
+    ],
+    "assignments": [
+        {
+            "universe": 0,
+            "start_address": 1,
+            "profile_name": "StageCanvas-Standard-Layer",
+            "count": 10
+        }
+    ]
+}

@@ -1641,14 +1641,14 @@ Files allowed:
 Out of scope:
 - UI Mapping Editor integration
 Acceptance:
-- [ ] Render pipeline accepts mesh geometry data (UV maps / vertices).
-- [ ] Textures are successfully mapped across the distorted grid.
-- [ ] Performance remains stable (<2ms latency addition).
+- [x] Render pipeline accepts mesh geometry data (UV maps / vertices).
+- [x] Textures are successfully mapped across the distorted grid.
+- [x] Performance remains stable (<2ms latency addition).
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-079 WebGPU Edge Blending & Masks (Mapping Engine)
 
@@ -1662,13 +1662,13 @@ Files allowed:
 Out of scope:
 - Multi-GPU communication
 Acceptance:
-- [ ] Renderer pipeline applies soft-edge blend masks to the final composited texture.
-- [ ] Alpha masking for custom stage shapes works via projected shapes.
+- [x] Renderer pipeline applies soft-edge blend masks to the final composited texture.
+- [x] Alpha masking for custom stage shapes works via projected shapes.
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-080 OSC Server Integration (IO Engine)
 
@@ -1682,14 +1682,14 @@ Files allowed:
 Out of scope:
 - MIDI
 Acceptance:
-- [ ] OSC Server runs alongside the API server.
-- [ ] Maps incoming OSC UDP packets to the internal trigger/cue REST API.
-- [ ] Secure/bound to configurable port (default 8000).
+- [x] OSC Server runs alongside the API server.
+- [x] Maps incoming OSC UDP packets to the internal trigger/cue REST API.
+- [x] Secure/bound to configurable port (default 8000).
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-081 MIDI Control Engine (IO Engine)
 
@@ -1703,14 +1703,14 @@ Files allowed:
 Out of scope:
 - WebMIDI in UI
 Acceptance:
-- [ ] Application connects to active MIDI devices.
-- [ ] MIDI CC messages route to layer opacity or transformations.
-- [ ] MIDI Note messages trigger cues.
+- [x] Application connects to active MIDI devices.
+- [x] MIDI CC messages route to layer opacity or transformations.
+- [x] MIDI Note messages trigger cues.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-082 Precision Time Protocol (PTP) Sync Stub
 
@@ -1724,14 +1724,14 @@ Files allowed:
 Out of scope:
 - Kernel driver integration
 Acceptance:
-- [ ] PTP Clock abstraction implemented.
-- [ ] Calculates true drift across the network, accounting for latency jitter.
-- [ ] Plugs directly into the Frame-Accurate Playback Scheduler (SC-074).
+- [x] PTP Clock abstraction implemented.
+- [x] Calculates true drift across the network, accounting for latency jitter.
+- [x] Plugs directly into the Frame-Accurate Playback Scheduler (SC-074).
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-083 Node-Graph Designer Frontend (React)
 
@@ -1745,13 +1745,13 @@ Files allowed:
 Out of scope:
 - Advanced timeline lanes UI
 Acceptance:
-- [ ] Implementation of `reactflow` (or similar) canvas.
-- [ ] Visual blocks for "Camera Input", "YOLO Trigger", "Play Clip".
-- [ ] Edges drawn between blocks compile to a Show Rule JSON sent to the orchestrator.
+- [x] Implementation of `reactflow` (or similar) canvas.
+- [x] Visual blocks for "Camera Input", "YOLO Trigger", "Play Clip".
+- [x] Edges drawn between blocks compile to a Show Rule JSON sent to the orchestrator.
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-084 ArtNet / DMX Control Engine (IO Engine)
 
@@ -1765,13 +1765,13 @@ Files allowed:
 Out of scope:
 - Full Fixture Profile generation
 Acceptance:
-- [ ] ArtNet listener daemon runs in the background on port 6454.
-- [ ] DMX Universe/Channel combinations map dynamically to Layer properties (Opacity, Speed, Play/Pause).
+- [x] ArtNet listener daemon runs in the background on port 6454.
+- [x] DMX Universe/Channel combinations map dynamically to Layer properties (Opacity, Speed, Play/Pause).
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-085 NDI / Spout Output Integration
 
@@ -1785,13 +1785,13 @@ Files allowed:
 Out of scope:
 - NDI Ingest (Inputs)
 Acceptance:
-- [ ] Extends the WebGPU pipeline to push the final composited frame to an NDI sender stream.
-- [ ] NDI stream is discoverable on the local network.
+- [x] Extends the WebGPU pipeline to push the final composited frame to an NDI sender stream.
+- [x] NDI stream is discoverable on the local network.
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-086 Hardware Genlock Sync Stub
 
@@ -1805,13 +1805,13 @@ Files allowed:
 Out of scope:
 - Direct Quadro/Decklink driver API integration (mock only)
 Acceptance:
-- [ ] Renderer tick loop holds frame flip until Genlock pulse is received.
-- [ ] Drift metrics correctly account for Genlock holding time.
+- [x] Renderer tick loop holds frame flip until Genlock pulse is received.
+- [x] Drift metrics correctly account for Genlock holding time.
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-test`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-087 Redundancy & Auto-Failover
 
@@ -1825,14 +1825,14 @@ Files allowed:
 Out of scope:
 - Multi-master active-active writing
 Acceptance:
-- [ ] Backup node monitors Primary via dedicated heartbeat endpoint.
-- [ ] Backup promotes to Primary within 3 seconds of Primary failure.
-- [ ] Render-nodes gracefully reconnect to the promoted Backup.
+- [x] Backup node monitors Primary via dedicated heartbeat endpoint.
+- [x] Backup promotes to Primary within 3 seconds of Primary failure.
+- [x] Render-nodes gracefully reconnect to the promoted Backup.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-088 WebRTC Browser Monitoring
 
@@ -1846,9 +1846,82 @@ Files allowed:
 Out of scope:
 - Public internet relay (STUN/TURN handling)
 Acceptance:
-- [ ] Render node encodes its output map to a lightweight WebRTC stream.
-- [ ] Control UI dashboard can connect to the local stream and display moving video at >15 fps.
+- [x] Render node encodes its output map to a lightweight WebRTC stream.
+- [x] Control UI dashboard can connect to the local stream and display moving video at >15 fps.
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-089 Node-Graph Compiler & Dispatch
+
+Ticket: SC-089
+Scope: Compile visual ReactFlow connections into Show Rules and dispatch them to the Orchestrator API.
+Owner: feature-agent
+Files allowed:
+- `control-ui/components/node-graph.tsx`
+- `control-ui/lib/compiler.ts`
+- `orchestration-server/app/main.py`
+Acceptance:
+- [ ] Connecting a "YOLO Trigger" to a "Play Clip" node correctly updates the Orchestrator's rules DB.
+- [ ] UI reflects deployment success/failure status.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-090 Production NDI & WebRTC SDK Integration
+
+Ticket: SC-090
+Scope: Replace stubs with real NDI 5 and aiortc encoding.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/output/ndi_sender.py`
+- `render-node/app/output/webrtc_stream.py`
+- `render-node/requirements.txt`
+Acceptance:
+- [ ] Real NDI stream visible in NDI Studio Monitor.
+- [ ] WebRTC stream supports H.264 hardware encoding where available.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-091 DMX/ArtNet Fixture Profile Engine
+
+Ticket: SC-091
+Scope: Define a formal JSON schema for DMX-to-Parameter mapping.
+Owner: lead-agent
+Files allowed:
+- `shared-protocol/fixtures.json`
+- `orchestration-server/app/io/artnet_server.py`
+Acceptance:
+- [ ] Users can define custom ArtNet profiles (e.g. Channel 1=Opacity, 2=Speed).
+- [ ] Orchestrator handles multiple universes simultaneously.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-092 Multi-Node Canvas Splitting
+
+Ticket: SC-092
+Scope: Split a giant canvas into sub-segments for distributed rendering.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/models.py`
+- `render-node/app/renderer_gpu.py`
+- `shared-protocol/messages.v1.json`
+Acceptance:
+- [ ] Orchestrator can command Node A to render Top-Left 4K and Node B to render Bottom-Right 4K.
+- [ ] Sync maintained across the split via PTP.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-093 GPU Texture Sharing (NDI/Spout) Performance Optimization
+
+Ticket: SC-093
+Scope: Optimize texture readout from WebGPU for zero-copy streaming.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/renderer_gpu.py`
+- `render-node/app/output/ndi_sender.py`
+Acceptance:
+- [ ] Reduction in CPU usage compared to standard `read_texture` calls.
+- [ ] Maintain 60fps at 4K resolution.
 Deliverable:
 - [ ] branch + handoff note

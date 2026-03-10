@@ -34,7 +34,7 @@ wait_for_log() {
   local elapsed=0
 
   while (( elapsed < timeout_sec )); do
-    if rg -q "$pattern" "$logfile" 2>/dev/null; then
+    if grep -qE "$pattern" "$logfile" 2>/dev/null; then
       return 0
     fi
     sleep 1

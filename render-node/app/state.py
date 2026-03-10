@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .bridge import Decoder, NullDecoder, NullRendererBridge, RendererBridge
+from .sync_genlock import GenlockSync
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
 CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS"]
@@ -132,6 +133,7 @@ class NodeState:
     playback_started_ms: int | None = None
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
     decoder: Decoder = field(default_factory=NullDecoder)
+    genlock: GenlockSync = field(default_factory=GenlockSync)
     command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 

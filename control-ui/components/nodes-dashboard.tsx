@@ -1106,6 +1106,11 @@ export function NodesDashboard() {
                       Cache {node.cache?.cached_assets ?? 0}/{node.cache?.asset_total ?? 0} •{" "}
                       {node.cache?.progress_assets_pct?.toFixed(0) ?? 0}%
                     </span>
+                    {node.metrics.genlock && (
+                      <span className={node.metrics.genlock.genlock_active ? "text-emerald-400" : "text-amber-400"}>
+                        Genlock: {node.metrics.genlock.genlock_active ? "LOCKED" : "OFF"} ({node.metrics.genlock.genlock_total_hold_ms.toFixed(1)}ms hold)
+                      </span>
+                    )}
                   </div>
                   <div className="node-actions">
                     <span className={`drift-pill drift-${alertLevel.toLowerCase()}`}>{alertLevel}</span>

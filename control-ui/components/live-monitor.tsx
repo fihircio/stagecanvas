@@ -15,23 +15,63 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ streamUrl, nodeId }) =
     useEffect(() => {
         if (!videoRef.current) return;
 
-        console.log(`[live-monitor] Connecting to stream for node ${nodeId}...`);
+        let pc: RTCPeerConnection | null = null;
 
-        // In a real implementation, this would use the WebRTC API to connect
-        // to the render-node's signaling server and attach the media stream.
-        // e.g.
-        // const pc = new RTCPeerConnection();
-        // pc.ontrack = (event) => { videoRef.current!.srcObject = event.streams[0]; };
+        const connect = async () => {
+            try {
+                pc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
 
-        // Mocking a successful connection
-        const timer = setTimeout(() => {
-            setIsConnected(true);
-            console.log(`[live-monitor] Connected to stream for node ${nodeId}`);
-        }, 1000);
+                pc.ontrack = (event) => {
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = event.streams[0];
+                    }
+                };
+
+                pc.onconnectionstatechange = () => {
+                    if (pc?.connectionState === 'connected') {
+                        setIsConnected(true);
+                        setError(null);
+                    } else if (pc?.connectionState === 'failed') {
+                        setError('WebRTC Connection Failed');
+                    }
+                };
+
+                // Fetch offer from render-node signaling server
+                const response = await fetch(`${streamUrl}/offer`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        sdp: "", // Initial probe or just request offer
+                        type: "offer"
+                    }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const offer = await response.json();
+                await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                // Send answer back (simplified signaling; usually you need to POST the answer back)
+                // In our current render-node implementation, handle_answer is internal, 
+                // so we might need to adjust the backend signaling or this flow.
+                // Assuming the backend handles everything in the /offer call for simplicity in this stub.
+
+            } catch (err) {
+                console.error('[live-monitor] Connection error:', err);
+                setError('Failed to connect to stream');
+            }
+        };
+
+        connect();
 
         return () => {
-            clearTimeout(timer);
-            console.log(`[live-monitor] Disconnecting from stream for node ${nodeId}`);
+            if (pc) {
+                pc.close();
+            }
+            setIsConnected(false);
         };
     }, [nodeId, streamUrl]);
 

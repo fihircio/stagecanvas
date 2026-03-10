@@ -27,6 +27,13 @@ class MappingBlend(BaseModel):
     black_level: float = Field(default=0.0, ge=0.0)
 
 
+class CanvasRegion(BaseModel):
+    global_x: int = 0
+    global_y: int = 0
+    width: int = 1920
+    height: int = 1080
+
+
 class TimelineLayerTransform(BaseModel):
     x: float = 0.0
     y: float = 0.0
@@ -72,13 +79,16 @@ class MappingMesh(BaseModel):
 
 class MappingOutput(BaseModel):
     output_id: str = Field(min_length=1)
+    target_node_id: str | None = None
     mesh: MappingMesh
     blend: MappingBlend = Field(default_factory=MappingBlend)
+    canvas_region: CanvasRegion = Field(default_factory=CanvasRegion)
 
 
 class MappingConfig(BaseModel):
     version: Literal["v1"] = "v1"
     outputs: list[MappingOutput] = Field(min_length=1)
+    fixture_profiles: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RegisterNodeRequest(BaseModel):

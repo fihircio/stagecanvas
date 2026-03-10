@@ -1,4 +1,3 @@
-import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ class NDISender:
         logger.info(f"[ndi-sender] Stopping NDI stream: {self.stream_name}")
         self.is_running = False
 
-    def send_frame(self, frame_data: bytes):
+    def send_frame(self, frame_data: bytes, width: int = 1920, height: int = 1080):
         """
         Simulate sending a frame to the NDI stream.
         """

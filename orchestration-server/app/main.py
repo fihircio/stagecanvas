@@ -683,15 +683,26 @@ async def preload_show(body: PreloadShowRequest) -> dict[str, object]:
     if replay is not None:
         return replay
 
+    show_id = body.show_id
+    payload = {
+        "show_id": show_id,
+        "preload_only": True,
+        "request_id": body.request_id,
+        "assets": [asset.model_dump(mode="json", exclude_none=True) for asset in body.assets],
+    }
+
+    # SC-092: Ensure mapping_config is included for canvas splitting
+    try:
+        mapping_config = timeline_repo.get_mapping_config(str(show_id))
+    except KeyError:
+        mapping_config = None
+    if mapping_config:
+        payload["mapping_config"] = mapping_config
+
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="LOAD_SHOW",
-        payload={
-            "show_id": body.show_id,
-            "preload_only": True,
-            "request_id": body.request_id,
-            "assets": [asset.model_dump(mode="json", exclude_none=True) for asset in body.assets],
-        },
+        payload=payload,
         seq=command_ledger.next_seq(),
         origin="scheduler",
     )
