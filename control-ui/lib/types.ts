@@ -26,6 +26,17 @@ export type NodeSnapshot = {
   replay_count?: number;
   queued_count?: number;
   reconnect_count?: number;
+  drift_history_summary?: {
+    sample_count: number;
+    window_ms: number;
+    avg_abs_drift_ms: number;
+    max_abs_drift_ms: number;
+    warn_samples: number;
+    critical_samples: number;
+    last_drift_ms: number;
+    last_level: DriftLevel;
+    last_timestamp_ms: number;
+  };
   cache?: {
     show_id: string | null;
     preload_state: "EMPTY" | "LOADING" | "READY" | "FAILED";

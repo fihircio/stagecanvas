@@ -59,6 +59,20 @@ class OperatorSnapshotReliabilityTests(unittest.TestCase):
         with self.client.websocket_connect("/ws/nodes/node-r1"):
             pass
 
+        for drift_ms in (0.5, 2.6, 9.2):
+            hb = self.client.post(
+                "/api/v1/nodes/node-r1/heartbeat",
+                json={
+                    "version": "v1",
+                    "status": "READY",
+                    "show_id": "demo-show",
+                    "position_ms": 0,
+                    "drift_ms": drift_ms,
+                    "metrics": {"cpu_pct": 12.0, "gpu_pct": 10.0, "fps": 60.0, "dropped_frames": 0},
+                },
+            )
+            self.assertEqual(hb.status_code, 200, hb.text)
+
         with self.client.websocket_connect("/ws/operators") as ws:
             snapshot = ws.receive_json()
 
@@ -71,6 +85,12 @@ class OperatorSnapshotReliabilityTests(unittest.TestCase):
         self.assertGreaterEqual(int(node["queued_count"]), 1)
         self.assertGreaterEqual(int(node["replay_count"]), 1)
         self.assertGreaterEqual(int(node["reconnect_count"]), 1)
+        self.assertIn("drift_history_summary", node)
+        summary = node["drift_history_summary"]
+        self.assertGreaterEqual(int(summary["sample_count"]), 3)
+        self.assertGreaterEqual(float(summary["max_abs_drift_ms"]), 9.0)
+        self.assertGreaterEqual(int(summary["warn_samples"]), 1)
+        self.assertGreaterEqual(int(summary["critical_samples"]), 1)
 
 
 if __name__ == "__main__":

@@ -257,6 +257,55 @@ class NodeRegistry:
             "queued_count": record.queued_count,
             "reconnect_count": record.reconnect_count,
             "cache": record.cache,
+            "drift_history_summary": self._drift_history_summary(record),
+        }
+
+    @staticmethod
+    def _drift_history_summary(record: NodeRecord) -> dict[str, Any]:
+        history = list(record.drift_history)
+        if not history:
+            return {
+                "sample_count": 0,
+                "window_ms": 0,
+                "avg_abs_drift_ms": 0.0,
+                "max_abs_drift_ms": 0.0,
+                "warn_samples": 0,
+                "critical_samples": 0,
+                "last_drift_ms": record.drift_ms,
+                "last_level": record.drift_level,
+                "last_timestamp_ms": record.last_seen_ms,
+            }
+
+        first_ts = int(history[0]["timestamp_ms"])
+        last = history[-1]
+        last_ts = int(last["timestamp_ms"])
+        window_ms = max(0, last_ts - first_ts)
+
+        abs_values: list[float] = []
+        warn_samples = 0
+        critical_samples = 0
+        for entry in history:
+            drift_ms = float(entry.get("drift_ms", 0.0))
+            abs_values.append(abs(drift_ms))
+            level = entry.get("drift_level")
+            if level == "CRITICAL":
+                critical_samples += 1
+            elif level == "WARN":
+                warn_samples += 1
+
+        avg_abs = sum(abs_values) / len(abs_values)
+        max_abs = max(abs_values) if abs_values else 0.0
+
+        return {
+            "sample_count": len(history),
+            "window_ms": window_ms,
+            "avg_abs_drift_ms": round(avg_abs, 3),
+            "max_abs_drift_ms": round(max_abs, 3),
+            "warn_samples": warn_samples,
+            "critical_samples": critical_samples,
+            "last_drift_ms": float(last.get("drift_ms", 0.0)),
+            "last_level": last.get("drift_level", record.drift_level),
+            "last_timestamp_ms": last_ts,
         }
 
     @staticmethod
