@@ -1098,15 +1098,15 @@ Out of scope:
 - real media decoding
 - filesystem storage implementation
 Acceptance:
-- [ ] cache index tracks assets with size/last-access metadata
-- [ ] eviction policy removes least-recently-used entries when over limit
-- [ ] tests cover eviction order and capacity enforcement
+- [x] cache index tracks assets with size/last-access metadata
+- [x] eviction policy removes least-recently-used entries when over limit
+- [x] tests cover eviction order and capacity enforcement
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
 - [ ] `make render-compile`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-056 Mapping Config End-to-End Application
 
@@ -1151,15 +1151,15 @@ Out of scope:
 - actual image/video preview rendering
 - UI design overhaul
 Acceptance:
-- [ ] UI can request a preview snapshot
-- [ ] orchestration returns stub response with node id + timestamp
-- [ ] tests cover request/response contract
+- [x] UI can request a preview snapshot
+- [x] orchestration returns stub response with node id + timestamp
+- [x] tests cover request/response contract
 Checks:
 - [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-058 Timeline Editor Drag/Reorder + Snapping Basics
 
@@ -1174,14 +1174,14 @@ Out of scope:
 - advanced multi-track selection
 - audio/effects lanes
 Acceptance:
-- [ ] track and clip order can be rearranged via simple drag controls
-- [ ] snapping toggle exists and affects UI ordering actions
-- [ ] UI updates without requiring full page refresh
+- [x] track and clip order can be rearranged via simple drag controls
+- [x] snapping toggle exists and affects UI ordering actions
+- [x] UI updates without requiring full page refresh
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-059 Mapping UI Stub
 
@@ -1196,14 +1196,14 @@ Out of scope:
 - visual mesh editor
 - image preview overlays
 Acceptance:
-- [ ] operator can load/save mapping config JSON via modal or panel
-- [ ] validation errors surface from orchestration responses
-- [ ] config is sent with show update endpoints
+- [x] operator can load/save mapping config JSON via modal or panel
+- [x] validation errors surface from orchestration responses
+- [x] config is sent with show update endpoints
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-060 Render-Node Video Playback Stub
 
@@ -1225,6 +1225,28 @@ Acceptance:
 Checks:
 - [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
 - [ ] `make render-compile`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-061 Control UI Dark Mode
+
+Ticket: SC-061
+Scope: add a dark mode theme with a user-visible toggle.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/app/globals.css`
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/app/layout.tsx`
+Out of scope:
+- full redesign of layout
+- new typography or branding system
+Acceptance:
+- [ ] dark mode can be toggled in the UI and persists for the session
+- [ ] key panels (timeline, node cards, preview, actions) are legible in dark mode
+- [ ] colors maintain sufficient contrast
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
 - [ ] `make sanity`
 Deliverable:
 - [ ] branch + handoff note
