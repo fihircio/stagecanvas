@@ -35,6 +35,9 @@ class RecordingBridge(RendererBridge):
     async def ping(self) -> None:
         self.events.append(("ping", {}))
 
+    async def update_layers(self, layers: list[dict[str, Any]]) -> None:
+        self.events.append(("update_layers", {"layers": layers}))
+
     async def tick(self, snapshot: dict[str, Any]) -> None:
         self.events.append(("tick", snapshot))
 

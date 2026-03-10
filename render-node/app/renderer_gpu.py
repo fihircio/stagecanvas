@@ -150,11 +150,12 @@ class WebGPURendererBridge(RendererBridge):
     async def pause(self) -> None:
         print(f"[gpu-renderer] Paused.")
 
-    async def seek(self, position_ms: int) -> None:
-        print(f"[gpu-renderer] Seek to {position_ms}ms.")
-
     async def stop(self) -> None:
         print(f"[gpu-renderer] Stopped.")
+
+    async def update_layers(self, layers: list[dict[str, Any]]) -> None:
+        # Update internal texture state for each layer
+        pass
 
     async def ping(self) -> None:
         pass

@@ -1,7 +1,7 @@
 import unittest
 import asyncio
 import time
-from render_node.app.sync_genlock import GenlockSync
+from app.sync_genlock import GenlockSync
 
 class TestGenlockSync(unittest.TestCase):
     def test_genlock_metrics_initial(self):

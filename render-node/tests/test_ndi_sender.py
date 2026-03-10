@@ -1,6 +1,6 @@
 import unittest
-from render_node.app.output.ndi_sender import NDISender
-from render_node.app.output.webrtc_stream import WebRTCStreamer
+from app.output.ndi_sender import NDISender
+from app.output.webrtc_stream import WebRTCStreamer
 
 class TestOutputBroadcasting(unittest.TestCase):
     def test_ndi_sender_flow(self):
