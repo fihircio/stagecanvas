@@ -54,6 +54,15 @@ export function NodesDashboard() {
   const [serverDriftSlo, setServerDriftSlo] = useState<DriftSloSnapshot | null>(null);
   const [previewTab, setPreviewTab] = useState("combined");
   const [timelineSnapshot, setTimelineSnapshot] = useState<TimelineSnapshot | null>(null);
+  const [trackId, setTrackId] = useState("track-1");
+  const [trackLabel, setTrackLabel] = useState("Track 1");
+  const [trackKind, setTrackKind] = useState("video");
+  const [clipTrackId, setClipTrackId] = useState("track-1");
+  const [clipId, setClipId] = useState("clip-1");
+  const [clipLabel, setClipLabel] = useState("Clip 1");
+  const [clipStart, setClipStart] = useState("0");
+  const [clipDuration, setClipDuration] = useState("5000");
+  const [clipKind, setClipKind] = useState("video");
 
   const wsUrl = useMemo(() => {
     const base = process.env.NEXT_PUBLIC_ORCHESTRATION_WS ?? "ws://localhost:8010/ws/operators";
@@ -71,25 +80,36 @@ export function NodesDashboard() {
     return `${command.toLowerCase()}-${suffix}`;
   }
 
-  async function postJson(path: string, body: Record<string, unknown>, command: string) {
+  async function postJson(
+    path: string,
+    body: Record<string, unknown> | null,
+    command: string,
+    method: "POST" | "PUT" | "DELETE" = "POST",
+  ) {
     setActionState("sending");
     const requestId = makeRequestId(command);
     try {
+      const headers: Record<string, string> = {};
+      let requestBody: Record<string, unknown> | null = null;
+      if (body) {
+        headers["Content-Type"] = "application/json";
+        requestBody = { ...body, request_id: requestId };
+      }
       const res = await fetch(`${apiUrl}${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, request_id: requestId }),
+        method,
+        headers,
+        body: requestBody ? JSON.stringify(requestBody) : undefined,
       });
-      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const responsePayload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!res.ok) {
-        const detail = (payload.detail ?? payload) as Record<string, unknown>;
+        const detail = (responsePayload.detail ?? responsePayload) as Record<string, unknown>;
         const reason = typeof detail.reason_code === "string" ? detail.reason_code : "UNKNOWN_ERROR";
         const message = typeof detail.message === "string" ? detail.message : JSON.stringify(detail).slice(0, 160);
         throw new Error(`HTTP ${res.status}: ${reason} - ${message}`);
       }
 
-      const reason = typeof payload.reason_code === "string" ? payload.reason_code : "OK";
-      const replay = payload.idempotent_replay === true ? " replay=true" : "";
+      const reason = typeof responsePayload.reason_code === "string" ? responsePayload.reason_code : "OK";
+      const replay = responsePayload.idempotent_replay === true ? " replay=true" : "";
       setActionState("ok");
       setLastCommand({
         command,
@@ -215,6 +235,56 @@ export function NodesDashboard() {
       },
       "SEEK",
     );
+  };
+
+  const onUpsertTrack = async () => {
+    await postJson(
+      `/api/v1/timeline/shows/${encodeURIComponent(showId)}/tracks/${encodeURIComponent(trackId)}`,
+      {
+        label: trackLabel,
+        kind: trackKind,
+      },
+      "UPSERT_TRACK",
+      "PUT",
+    );
+    await loadTimeline();
+  };
+
+  const onDeleteTrack = async () => {
+    await postJson(
+      `/api/v1/timeline/shows/${encodeURIComponent(showId)}/tracks/${encodeURIComponent(trackId)}`,
+      null,
+      "DELETE_TRACK",
+      "DELETE",
+    );
+    await loadTimeline();
+  };
+
+  const onUpsertClip = async () => {
+    const start = Number.parseInt(clipStart, 10);
+    const duration = Number.parseInt(clipDuration, 10);
+    await postJson(
+      `/api/v1/timeline/shows/${encodeURIComponent(showId)}/tracks/${encodeURIComponent(clipTrackId)}/clips/${encodeURIComponent(clipId)}`,
+      {
+        label: clipLabel,
+        start_ms: Number.isFinite(start) ? Math.max(0, start) : 0,
+        duration_ms: Number.isFinite(duration) ? Math.max(1, duration) : 1000,
+        kind: clipKind,
+      },
+      "UPSERT_CLIP",
+      "PUT",
+    );
+    await loadTimeline();
+  };
+
+  const onDeleteClip = async () => {
+    await postJson(
+      `/api/v1/timeline/shows/${encodeURIComponent(showId)}/tracks/${encodeURIComponent(clipTrackId)}/clips/${encodeURIComponent(clipId)}`,
+      null,
+      "DELETE_CLIP",
+      "DELETE",
+    );
+    await loadTimeline();
   };
 
   useEffect(() => {
@@ -368,6 +438,56 @@ export function NodesDashboard() {
               </div>
             ))}
             {timelineTracks.length === 0 ? <div className="empty-card muted">No timeline tracks.</div> : null}
+          </div>
+        </div>
+        <div className="timeline-editor">
+          <div className="editor-column">
+            <div className="editor-title">Tracks</div>
+            <div className="editor-grid">
+              <input className="input compact" value={trackId} onChange={(e) => setTrackId(e.target.value)} placeholder="track_id" />
+              <input className="input compact" value={trackLabel} onChange={(e) => setTrackLabel(e.target.value)} placeholder="label" />
+              <select className="input compact" value={trackKind} onChange={(e) => setTrackKind(e.target.value)}>
+                <option value="video">video</option>
+                <option value="audio">audio</option>
+                <option value="image">image</option>
+                <option value="alpha">alpha</option>
+                <option value="trigger">trigger</option>
+              </select>
+              <button className="btn subtle" onClick={onUpsertTrack}>
+                Save Track
+              </button>
+              <button className="btn subtle" onClick={onDeleteTrack}>
+                Delete Track
+              </button>
+            </div>
+          </div>
+          <div className="editor-column">
+            <div className="editor-title">Clips</div>
+            <div className="editor-grid">
+              <input
+                className="input compact"
+                value={clipTrackId}
+                onChange={(e) => setClipTrackId(e.target.value)}
+                placeholder="track_id"
+              />
+              <input className="input compact" value={clipId} onChange={(e) => setClipId(e.target.value)} placeholder="clip_id" />
+              <input className="input compact" value={clipLabel} onChange={(e) => setClipLabel(e.target.value)} placeholder="label" />
+              <input className="input compact" value={clipStart} onChange={(e) => setClipStart(e.target.value)} placeholder="start_ms" />
+              <input className="input compact" value={clipDuration} onChange={(e) => setClipDuration(e.target.value)} placeholder="duration_ms" />
+              <select className="input compact" value={clipKind} onChange={(e) => setClipKind(e.target.value)}>
+                <option value="video">video</option>
+                <option value="audio">audio</option>
+                <option value="image">image</option>
+                <option value="alpha">alpha</option>
+                <option value="trigger">trigger</option>
+              </select>
+              <button className="btn subtle" onClick={onUpsertClip}>
+                Save Clip
+              </button>
+              <button className="btn subtle" onClick={onDeleteClip}>
+                Delete Clip
+              </button>
+            </div>
           </div>
         </div>
       </section>

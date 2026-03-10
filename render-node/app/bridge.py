@@ -11,6 +11,9 @@ class RendererBridge(ABC):
     @abstractmethod
     async def connect(self, node_id: str, label: str) -> None: ...
 
+    async def set_mapping(self, mapping_config: dict[str, Any]) -> None:
+        return
+
     @abstractmethod
     async def load_show(self, show_id: str, payload: dict[str, Any]) -> None: ...
 
@@ -38,6 +41,9 @@ class RendererBridge(ABC):
 
 class NullRendererBridge(RendererBridge):
     async def connect(self, node_id: str, label: str) -> None:
+        return
+
+    async def set_mapping(self, mapping_config: dict[str, Any]) -> None:
         return
 
     async def load_show(self, show_id: str, payload: dict[str, Any]) -> None:
@@ -73,6 +79,9 @@ class MockUnityBridge(RendererBridge):
     async def connect(self, node_id: str, label: str) -> None:
         self._printer_task = asyncio.create_task(self._printer())
         await self._emit({"event": "connect", "node_id": node_id, "label": label})
+
+    async def set_mapping(self, mapping_config: dict[str, Any]) -> None:
+        await self._emit({"event": "set_mapping", "mapping": mapping_config})
 
     async def load_show(self, show_id: str, payload: dict[str, Any]) -> None:
         await self._emit({"event": "load_show", "show_id": show_id, "payload": payload})

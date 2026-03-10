@@ -94,6 +94,32 @@ body {
   margin-top: 10px;
 }
 
+.timeline-editor {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 12px;
+}
+
+.editor-column {
+  display: grid;
+  gap: 8px;
+}
+
+.editor-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #374151;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 8px;
+}
+
 .timeline-search,
 .timeline-lanes {
   border: 1px solid var(--line);

@@ -27,12 +27,16 @@ class NodeState:
     last_seq: int = 0
     scheduled_play_time_ms: int | None = None
     cache_show_id: str | None = None
-    cache_preload_state: Literal["IDLE", "PRELOADING", "READY", "ERROR"] = "IDLE"
+    cache_preload_state: Literal["EMPTY", "LOADING", "READY", "FAILED"] = "EMPTY"
     cache_asset_total: int = 0
     cache_cached_assets: int = 0
     cache_bytes_total: int = 0
     cache_bytes_cached: int = 0
+    cache_progress_assets_pct: float = 0.0
+    cache_progress_bytes_pct: float = 0.0
+    cache_progress_message: str | None = None
     cache_last_preload_request_id: str | None = None
+    mapping_config: dict[str, Any] | None = None
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
     command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -64,6 +68,9 @@ class NodeState:
             if command == "LOAD_SHOW":
                 self.show_id = str(payload.get("show_id", self.show_id or "demo-show"))
                 bridge_call = ("load_show", {"show_id": self.show_id, "payload": payload})
+                mapping_config = payload.get("mapping_config")
+                if isinstance(mapping_config, dict):
+                    self.mapping_config = mapping_config
                 if bool(payload.get("preload_only", False)):
                     assets = payload.get("assets", [])
                     if not isinstance(assets, list):
@@ -75,16 +82,47 @@ class NodeState:
                             if isinstance(size, (int, float)):
                                 total_bytes += max(0, int(size))
                     self.cache_show_id = self.show_id
-                    self.cache_preload_state = "PRELOADING"
+                    self.cache_preload_state = "LOADING"
                     self.cache_asset_total = len(assets)
                     self.cache_cached_assets = len(assets)
                     self.cache_bytes_total = total_bytes
                     self.cache_bytes_cached = total_bytes
+                    self.cache_progress_assets_pct = 100.0 if assets else 0.0
+                    self.cache_progress_bytes_pct = 100.0 if total_bytes > 0 else 0.0
+                    self.cache_progress_message = "preload"
                     self.cache_last_preload_request_id = (
                         str(payload["request_id"]) if payload.get("request_id") is not None else None
                     )
                     self.cache_preload_state = "READY"
                     history["detail"] = "preloaded"
+                elif bool(payload.get("transfer_only", False)):
+                    assets = payload.get("assets", [])
+                    if not isinstance(assets, list):
+                        assets = []
+                    total_bytes = 0
+                    for asset in assets:
+                        if isinstance(asset, dict):
+                            size = asset.get("size_bytes", 0)
+                            if isinstance(size, (int, float)):
+                                total_bytes += max(0, int(size))
+                    self.cache_show_id = self.show_id
+                    self.cache_preload_state = "LOADING"
+                    self.cache_asset_total = len(assets)
+                    self.cache_cached_assets = 0
+                    self.cache_bytes_total = total_bytes
+                    self.cache_bytes_cached = 0
+                    self.cache_progress_assets_pct = 0.0
+                    self.cache_progress_bytes_pct = 0.0
+                    self.cache_progress_message = "transfer"
+                    self.cache_last_preload_request_id = (
+                        str(payload["request_id"]) if payload.get("request_id") is not None else None
+                    )
+                    self.cache_cached_assets = len(assets)
+                    self.cache_bytes_cached = total_bytes
+                    self.cache_progress_assets_pct = 100.0 if assets else 0.0
+                    self.cache_progress_bytes_pct = 100.0 if total_bytes > 0 else 0.0
+                    self.cache_preload_state = "READY"
+                    history["detail"] = "transfer"
                 else:
                     self.status = "LOADING"
                     self.status = "READY"
@@ -120,6 +158,8 @@ class NodeState:
             return
 
         try:
+            if self.mapping_config is not None:
+                await self.bridge.set_mapping(self.mapping_config)
             name, args = bridge_call
             if name == "load_show":
                 await self.bridge.load_show(args["show_id"], args["payload"])
@@ -195,11 +235,14 @@ class NodeState:
                     "show_id": self.cache_show_id,
                     "preload_state": self.cache_preload_state,
                     "asset_total": self.cache_asset_total,
-                    "cached_assets": self.cache_cached_assets,
-                    "bytes_total": self.cache_bytes_total,
-                    "bytes_cached": self.cache_bytes_cached,
-                    "last_preload_request_id": self.cache_last_preload_request_id,
-                },
+                "cached_assets": self.cache_cached_assets,
+                "bytes_total": self.cache_bytes_total,
+                "bytes_cached": self.cache_bytes_cached,
+                "progress_assets_pct": self.cache_progress_assets_pct,
+                "progress_bytes_pct": self.cache_progress_bytes_pct,
+                "progress_message": self.cache_progress_message,
+                "last_preload_request_id": self.cache_last_preload_request_id,
+            },
             }
 
     async def diagnostics_snapshot(self) -> dict[str, Any]:
@@ -225,9 +268,12 @@ class NodeState:
                     "show_id": self.cache_show_id,
                     "preload_state": self.cache_preload_state,
                     "asset_total": self.cache_asset_total,
-                    "cached_assets": self.cache_cached_assets,
-                    "bytes_total": self.cache_bytes_total,
-                    "bytes_cached": self.cache_bytes_cached,
-                    "last_preload_request_id": self.cache_last_preload_request_id,
-                },
-            }
+                "cached_assets": self.cache_cached_assets,
+                "bytes_total": self.cache_bytes_total,
+                "bytes_cached": self.cache_bytes_cached,
+                "progress_assets_pct": self.cache_progress_assets_pct,
+                "progress_bytes_pct": self.cache_progress_bytes_pct,
+                "progress_message": self.cache_progress_message,
+                "last_preload_request_id": self.cache_last_preload_request_id,
+            },
+        }

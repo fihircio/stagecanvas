@@ -92,6 +92,32 @@ class NodeStateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cache["bytes_cached"], 3072)
         self.assertEqual(cache["last_preload_request_id"], "preload-r1")
 
+    async def test_transfer_only_load_show_updates_cache_contract(self) -> None:
+        state = NodeState(node_id="n6", label="Node 6")
+        await state.apply_command(
+            "LOAD_SHOW",
+            seq=9,
+            payload={
+                "show_id": "show-transfer",
+                "transfer_only": True,
+                "request_id": "transfer-r1",
+                "assets": [
+                    {"media_id": "m1", "size_bytes": 1500},
+                    {"media_id": "m2", "size_bytes": 2500},
+                ],
+            },
+            target_time_ms=None,
+        )
+
+        hb = await state.heartbeat_payload()
+        cache = hb["cache"]
+        self.assertEqual(cache["preload_state"], "READY")
+        self.assertEqual(cache["asset_total"], 2)
+        self.assertEqual(cache["cached_assets"], 2)
+        self.assertEqual(cache["bytes_total"], 4000)
+        self.assertEqual(cache["bytes_cached"], 4000)
+        self.assertEqual(cache["progress_message"], "transfer")
+
 
 if __name__ == "__main__":
     unittest.main()

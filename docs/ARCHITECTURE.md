@@ -47,6 +47,7 @@ Responsibilities:
 - Maintain local show state machine
 - Decode media, buffer frames, render outputs
 - Apply warp/blend and output to displays
+- Accept per-show mapping configuration and pass it to the render bridge (warp/blend pipeline hook)
 
 Tech direction (MVP):
 

@@ -41,6 +41,7 @@ uvicorn app.main:app --reload --port 8010
 - `POST /api/v1/nodes/{node_id}/commands`
 - `POST /api/v1/shows/play_at`
 - `POST /api/v1/shows/preload`
+- `POST /api/v1/assets/transfer`
 - `POST /api/v1/operators/pause`
 - `POST /api/v1/operators/stop`
 - `POST /api/v1/operators/load_show`
