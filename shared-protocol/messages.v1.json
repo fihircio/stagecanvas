@@ -122,6 +122,22 @@
       },
       "required": ["version", "outputs"],
       "additionalProperties": false
+    },
+    "MediaCodecProfile": {
+      "type": "string",
+      "enum": ["HAP", "HAP-Q", "ProRes4444", "H264", "H265"]
+    },
+    "MediaAssetMetadata": {
+      "type": "object",
+      "properties": {
+        "codec_profile": { "$ref": "#/$defs/MediaCodecProfile" },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "checksum": { "type": ["string", "null"] },
+        "uri": { "type": ["string", "null"] }
+      },
+      "required": ["codec_profile", "duration_ms", "size_bytes"],
+      "additionalProperties": true
     }
   }
 }

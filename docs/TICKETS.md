@@ -1266,14 +1266,14 @@ Out of scope:
 - production object storage integration
 - UI upload flow
 Acceptance:
-- [ ] `POST /api/v1/media/upload` accepts multipart file uploads
-- [ ] uploads stored under local `orchestration-server/data/media/`
-- [ ] registry entry created with filename, size, and checksum
+ [x] `POST /api/v1/media/upload` accepts multipart file uploads
+ [x] uploads stored under local `orchestration-server/data/media/`
+ [x] registry entry created with filename, size, and checksum
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-063 Media Transfer Worker v1
 
@@ -1291,15 +1291,15 @@ Out of scope:
 - distributed storage or CDN
 - UI workflow changes
 Acceptance:
-- [ ] transfer worker copies files from `orchestration-server/data/media/` to a render-node cache dir
-- [ ] cache state reflects transferred bytes and completion
-- [ ] tests validate file presence and cache metadata update
+ [x] transfer worker copies files from `orchestration-server/data/media/` to a render-node cache dir
+ [x] cache state reflects transferred bytes and completion
+ [x] tests validate file presence and cache metadata update
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-064 Render-Node Local Cache Persistence
 
@@ -1362,14 +1362,14 @@ Out of scope:
 - transcoding implementation
 - UI profile editor
 Acceptance:
-- [ ] media registry stores codec profile (`HAP`, `HAP-Q`, `ProRes4444`, `H264`)
-- [ ] unsupported profiles rejected with reason code
-- [ ] tests cover acceptance + rejection paths
+ [x] media registry stores codec profile (`HAP`, `HAP-Q`, `ProRes4444`, `H264`)
+ [x] unsupported profiles rejected with reason code
+ [x] tests cover acceptance + rejection paths
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-067 Decoder Integration Stub
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .config import PROTOCOL_VERSION
 
@@ -10,6 +10,14 @@ NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
 CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
 ProtocolVersion = Literal["v1"]
 MediaAssetStatus = Literal["REGISTERED", "INGESTING", "READY", "FAILED"]
+TranscodeJobStatus = Literal["QUEUED", "RUNNING", "DONE", "FAILED"]
+SUPPORTED_CODEC_PROFILES: dict[str, str] = {
+    "HAP": "HAP",
+    "HAP-Q": "HAP-Q",
+    "PRORES4444": "ProRes4444",
+    "H264": "H264",
+    "H265": "H265",
+}
 
 
 class MappingBlend(BaseModel):
@@ -175,6 +183,11 @@ class MediaAssetMetadata(BaseModel):
     duration_ms: int = Field(ge=0)
     size_bytes: int = Field(ge=0)
 
+    @field_validator("codec_profile")
+    @classmethod
+    def _validate_codec_profile(cls, value: str) -> str:
+        return _normalize_codec_profile(value)
+
 
 class MediaAssetCreateRequest(BaseModel):
     asset_id: str = Field(min_length=1)
@@ -186,12 +199,29 @@ class MediaAssetCreateRequest(BaseModel):
     uri: str | None = None
     status: MediaAssetStatus = "REGISTERED"
 
+    @field_validator("codec_profile")
+    @classmethod
+    def _validate_codec_profile(cls, value: str) -> str:
+        return _normalize_codec_profile(value)
+
 
 class MediaAssetUpdateRequest(BaseModel):
     status: MediaAssetStatus | None = None
     error_message: str | None = None
     checksum: str | None = None
     uri: str | None = None
+
+
+def _normalize_codec_profile(value: str) -> str:
+    raw = str(value).strip()
+    if not raw:
+        raise ValueError("UNSUPPORTED_CODEC_PROFILE")
+    key = raw.upper().replace("_", "-").replace(" ", "-")
+    if key == "H264-MAIN":
+        return raw
+    if key in SUPPORTED_CODEC_PROFILES:
+        return raw
+    raise ValueError("UNSUPPORTED_CODEC_PROFILE")
 
 
 class MediaAssetResponse(BaseModel):
@@ -203,6 +233,25 @@ class MediaAssetResponse(BaseModel):
     checksum: str | None
     uri: str | None
     status: MediaAssetStatus
+    error_message: str | None
+    created_at_ms: int
+    updated_at_ms: int
+
+
+class TranscodeJobCreateRequest(BaseModel):
+    target_profile: str = Field(min_length=1)
+
+
+class TranscodeJobUpdateRequest(BaseModel):
+    status: TranscodeJobStatus | None = None
+    error_message: str | None = None
+
+
+class TranscodeJobResponse(BaseModel):
+    job_id: str
+    asset_id: str
+    target_profile: str
+    status: TranscodeJobStatus
     error_message: str | None
     created_at_ms: int
     updated_at_ms: int
@@ -227,3 +276,10 @@ class TimelineUpsertClipRequest(BaseModel):
 class PreviewSnapshotRequest(BaseModel):
     node_ids: list[str] = Field(default_factory=list)
     show_id: str | None = None
+
+
+class PreviewImageRequest(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
+    show_id: str | None = None
+    width: int = Field(default=320, ge=1)
+    height: int = Field(default=180, ge=1)
