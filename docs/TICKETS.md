@@ -914,7 +914,7 @@ Acceptance:
 - [x] tests cover idempotent asset registration by stable `asset_id`
 Checks:
 - [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -963,8 +963,8 @@ Acceptance:
 - [x] integration test validates error path marks node `ERROR`
 Checks:
 - [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -1034,7 +1034,7 @@ Acceptance:
 - [x] tests cover invalid/missing fields and version compatibility
 Checks:
 - [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -1053,14 +1053,14 @@ Out of scope:
 - real object storage integration
 - UI ingestion workflow
 Acceptance:
- [x] registry persists media entries to a local storage stub
- [x] entries survive process restart in tests
- [x] API returns consistent metadata after reload
+- [x] registry persists media entries to a local storage stub
+- [x] entries survive process restart in tests
+- [x] API returns consistent metadata after reload
 Checks:
- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
- [x] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
- [x] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-054 Asset Transfer Worker Stub
 
@@ -1076,14 +1076,14 @@ Out of scope:
 - actual file transfer implementation
 - UI changes
 Acceptance:
- [x] transfer requests are queued and processed asynchronously
- [x] retries apply with bounded backoff on simulated failures
- [x] worker status is observable via snapshots or logs
+- [x] transfer requests are queued and processed asynchronously
+- [x] retries apply with bounded backoff on simulated failures
+- [x] worker status is observable via snapshots or logs
 Checks:
- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
- [x] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
- [x] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-055 Render Node Media Cache Index
 
@@ -1103,8 +1103,8 @@ Acceptance:
 - [x] tests cover eviction order and capacity enforcement
 Checks:
 - [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -1125,15 +1125,15 @@ Out of scope:
 - real shader/mesh processing
 - UI mapping editor
 Acceptance:
- [x] mapping config flows from show update to node load to bridge `set_mapping`
- [x] invalid mapping config rejected with reason code
- [x] tests cover success and failure propagation
+- [x] mapping config flows from show update to node load to bridge `set_mapping`
+- [x] invalid mapping config rejected with reason code
+- [x] tests cover success and failure propagation
 Checks:
- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
- [x] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
- [x] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-057 Preview Pipeline Stub
 
@@ -1155,9 +1155,9 @@ Acceptance:
 - [x] orchestration returns stub response with node id + timestamp
 - [x] tests cover request/response contract
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 - [x] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -1179,7 +1179,7 @@ Acceptance:
 - [x] UI updates without requiring full page refresh
 Checks:
 - [x] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -1201,7 +1201,7 @@ Acceptance:
 - [x] config is sent with show update endpoints
 Checks:
 - [x] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
 
@@ -1219,15 +1219,15 @@ Out of scope:
 - real codec integration
 - GPU pipeline implementation
 Acceptance:
- [x] playback stub starts at `PLAY_AT` target time and emits frame ticks
- [x] pause/stop affect stub state deterministically
- [x] tests cover timing offset and stop behavior
+- [x] playback stub starts at `PLAY_AT` target time and emits frame ticks
+- [x] pause/stop affect stub state deterministically
+- [x] tests cover timing offset and stop behavior
 Checks:
- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
- [x] `make render-compile`
- [x] `make sanity`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
- [x] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-061 Control UI Dark Mode
 
