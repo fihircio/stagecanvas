@@ -230,9 +230,6 @@ class RenderNodeAgent:
         next_tick = time.perf_counter()
         last_system_ms = time.time() * 1000
         while not self._stop_event.is_set():
-            # Genlock wait (Hardware/Stub VSync)
-            await self.genlock.wait_for_pulse()
-            
             system_now_ms = time.time() * 1000
             dt_ms = system_now_ms - last_system_ms
             
