@@ -80,6 +80,7 @@ export function NodesDashboard() {
   const [mappingJson, setMappingJson] = useState("");
   const [mappingStatus, setMappingStatus] = useState<"idle" | "saving" | "ok" | "error">("idle");
   const [mappingError, setMappingError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [trackId, setTrackId] = useState("track-1");
   const [trackLabel, setTrackLabel] = useState("Track 1");
   const [trackKind, setTrackKind] = useState("video");
@@ -242,6 +243,24 @@ export function NodesDashboard() {
       setMappingJson(sampleMappingJson);
     }
   }, [mappingJson, sampleMappingJson]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("sc-theme");
+    const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const initial = stored === "dark" || stored === "light" ? stored : prefersDark ? "dark" : "light";
+    setTheme(initial);
+    document.documentElement.dataset.theme = initial;
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("sc-theme", next);
+    }
+    document.documentElement.dataset.theme = next;
+  };
 
   const onPlayAt = async () => {
     const now = Date.now();
@@ -612,6 +631,11 @@ export function NodesDashboard() {
           <span className="muted">
             WS <span className={`conn-state conn-${socketStatus}`}>{socketStatus}</span> • protocol {protocolVersion}
           </span>
+        </div>
+        <div className="topbar-actions">
+          <button className="btn subtle theme-toggle" onClick={toggleTheme}>
+            {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          </button>
         </div>
       </header>
 
