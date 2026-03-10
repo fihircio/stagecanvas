@@ -94,4 +94,5 @@ make render-smoke
 - Diagnostics output includes heartbeat counters, reconnect attempts, and command history stats.
 - Log stream policy: info logs go to stdout; warn/error logs go to stderr.
 - Repeated warning events are rate-limited with summary lines to reduce log flooding.
+- `LOAD_SHOW` with `preload_only=true` updates node cache contract fields in heartbeat/diagnostics for orchestration monitoring.
 - `make render-smoke` runs a bounded end-to-end node session against local orchestration and validates diagnostics output.

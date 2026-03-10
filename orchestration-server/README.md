@@ -39,6 +39,7 @@ uvicorn app.main:app --reload --port 8010
 - `POST /api/v1/commands/broadcast`
 - `POST /api/v1/nodes/{node_id}/commands`
 - `POST /api/v1/shows/play_at`
+- `POST /api/v1/shows/preload`
 - `POST /api/v1/operators/pause`
 - `POST /api/v1/operators/stop`
 - `POST /api/v1/operators/load_show`
@@ -56,6 +57,8 @@ uvicorn app.main:app --reload --port 8010
 - Operator WS snapshots include drift SLO summary and protocol version.
 - Timeline domain is persisted in SQLite at `orchestration-server/data/timeline.db`.
 - Operator and `play_at` endpoints accept optional `request_id` for idempotent retries.
+- `preload` endpoint accepts optional `request_id` and dispatches additive `LOAD_SHOW` payload with `preload_only=true`.
+- Heartbeats may include optional `cache` object and `/api/v1/nodes` snapshots expose latest cache state per node.
 - Dispatch responses include `reason_code` and per-node `reason_code` details.
 - Command idempotency + sequence ledger is persisted in `orchestration-server/data/orchestration.db`.
 

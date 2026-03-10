@@ -64,6 +64,34 @@ class NodeStateTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot["last_seq"], 60)
         self.assertEqual(snapshot["last_command"]["seq"], 60)
 
+    async def test_preload_only_load_show_updates_cache_contract(self) -> None:
+        state = NodeState(node_id="n5", label="Node 5")
+        await state.apply_command(
+            "LOAD_SHOW",
+            seq=8,
+            payload={
+                "show_id": "show-preload",
+                "preload_only": True,
+                "request_id": "preload-r1",
+                "assets": [
+                    {"media_id": "m1", "size_bytes": 1024},
+                    {"media_id": "m2", "size_bytes": 2048},
+                ],
+            },
+            target_time_ms=None,
+        )
+
+        hb = await state.heartbeat_payload()
+        self.assertIn("cache", hb)
+        cache = hb["cache"]
+        self.assertEqual(cache["show_id"], "show-preload")
+        self.assertEqual(cache["preload_state"], "READY")
+        self.assertEqual(cache["asset_total"], 2)
+        self.assertEqual(cache["cached_assets"], 2)
+        self.assertEqual(cache["bytes_total"], 3072)
+        self.assertEqual(cache["bytes_cached"], 3072)
+        self.assertEqual(cache["last_preload_request_id"], "preload-r1")
+
 
 if __name__ == "__main__":
     unittest.main()

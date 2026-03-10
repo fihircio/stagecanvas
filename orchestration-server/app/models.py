@@ -31,6 +31,7 @@ class HeartbeatRequest(BaseModel):
     position_ms: int = Field(default=0, ge=0)
     drift_ms: float = 0.0
     show_id: str | None = None
+    cache: "NodeCacheStatus | None" = None
 
 
 class ControlCommand(BaseModel):
@@ -54,6 +55,30 @@ class OperatorCommandRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     node_ids: list[str] = Field(default_factory=list)
     request_id: str | None = None
+
+
+class PreloadAsset(BaseModel):
+    media_id: str = Field(min_length=1)
+    uri: str | None = None
+    checksum: str | None = None
+    size_bytes: int = Field(default=0, ge=0)
+
+
+class PreloadShowRequest(BaseModel):
+    show_id: str = Field(min_length=1)
+    assets: list[PreloadAsset] = Field(default_factory=list)
+    node_ids: list[str] = Field(default_factory=list)
+    request_id: str | None = None
+
+
+class NodeCacheStatus(BaseModel):
+    show_id: str | None = None
+    preload_state: Literal["IDLE", "PRELOADING", "READY", "ERROR"] = "IDLE"
+    asset_total: int = Field(default=0, ge=0)
+    cached_assets: int = Field(default=0, ge=0)
+    bytes_total: int = Field(default=0, ge=0)
+    bytes_cached: int = Field(default=0, ge=0)
+    last_preload_request_id: str | None = None
 
 
 class TimelineClip(BaseModel):

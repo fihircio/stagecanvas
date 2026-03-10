@@ -26,6 +26,13 @@ class NodeState:
     fps: float = 60.0
     last_seq: int = 0
     scheduled_play_time_ms: int | None = None
+    cache_show_id: str | None = None
+    cache_preload_state: Literal["IDLE", "PRELOADING", "READY", "ERROR"] = "IDLE"
+    cache_asset_total: int = 0
+    cache_cached_assets: int = 0
+    cache_bytes_total: int = 0
+    cache_bytes_cached: int = 0
+    cache_last_preload_request_id: str | None = None
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
     command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -55,12 +62,34 @@ class NodeState:
             self.last_seq = seq
 
             if command == "LOAD_SHOW":
-                self.status = "LOADING"
                 self.show_id = str(payload.get("show_id", self.show_id or "demo-show"))
                 bridge_call = ("load_show", {"show_id": self.show_id, "payload": payload})
-                self.status = "READY"
-                self.position_ms = 0
-                self.scheduled_play_time_ms = None
+                if bool(payload.get("preload_only", False)):
+                    assets = payload.get("assets", [])
+                    if not isinstance(assets, list):
+                        assets = []
+                    total_bytes = 0
+                    for asset in assets:
+                        if isinstance(asset, dict):
+                            size = asset.get("size_bytes", 0)
+                            if isinstance(size, (int, float)):
+                                total_bytes += max(0, int(size))
+                    self.cache_show_id = self.show_id
+                    self.cache_preload_state = "PRELOADING"
+                    self.cache_asset_total = len(assets)
+                    self.cache_cached_assets = len(assets)
+                    self.cache_bytes_total = total_bytes
+                    self.cache_bytes_cached = total_bytes
+                    self.cache_last_preload_request_id = (
+                        str(payload["request_id"]) if payload.get("request_id") is not None else None
+                    )
+                    self.cache_preload_state = "READY"
+                    history["detail"] = "preloaded"
+                else:
+                    self.status = "LOADING"
+                    self.status = "READY"
+                    self.position_ms = 0
+                    self.scheduled_play_time_ms = None
             elif command == "PLAY_AT":
                 self.show_id = str(payload.get("show_id", self.show_id or "demo-show"))
                 if target_time_ms is not None:
@@ -162,6 +191,15 @@ class NodeState:
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
                 },
+                "cache": {
+                    "show_id": self.cache_show_id,
+                    "preload_state": self.cache_preload_state,
+                    "asset_total": self.cache_asset_total,
+                    "cached_assets": self.cache_cached_assets,
+                    "bytes_total": self.cache_bytes_total,
+                    "bytes_cached": self.cache_bytes_cached,
+                    "last_preload_request_id": self.cache_last_preload_request_id,
+                },
             }
 
     async def diagnostics_snapshot(self) -> dict[str, Any]:
@@ -183,4 +221,13 @@ class NodeState:
                 "command_history_size": len(self.command_history),
                 "command_history_limit": self.command_history.maxlen,
                 "last_command": self.command_history[-1] if self.command_history else None,
+                "cache": {
+                    "show_id": self.cache_show_id,
+                    "preload_state": self.cache_preload_state,
+                    "asset_total": self.cache_asset_total,
+                    "cached_assets": self.cache_cached_assets,
+                    "bytes_total": self.cache_bytes_total,
+                    "bytes_cached": self.cache_bytes_cached,
+                    "last_preload_request_id": self.cache_last_preload_request_id,
+                },
             }

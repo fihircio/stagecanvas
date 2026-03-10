@@ -14,6 +14,7 @@ from .models import (
     ControlCommand,
     HeartbeatRequest,
     OperatorCommandRequest,
+    PreloadShowRequest,
     RegisterNodeRequest,
     SchedulePlayAtRequest,
     TimelineShowSummary,
@@ -272,6 +273,41 @@ async def schedule_play_at(body: SchedulePlayAtRequest) -> dict[str, object]:
     result = await _dispatch_to_nodes(command, target_ids)
     response = {"ok": True, "scheduled": True, "play_at": body.target_time_ms, "dispatch": result}
     command_ledger.finalize_request("play_at", body.request_id, response)
+    return response
+
+
+@app.post("/api/v1/shows/preload")
+async def preload_show(body: PreloadShowRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="preload_show",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
+    command = ControlCommand(
+        version=PROTOCOL_VERSION,
+        command="LOAD_SHOW",
+        payload={
+            "show_id": body.show_id,
+            "preload_only": True,
+            "request_id": body.request_id,
+            "assets": [asset.model_dump(mode="json", exclude_none=True) for asset in body.assets],
+        },
+        seq=command_ledger.next_seq(),
+        origin="scheduler",
+    )
+    target_ids = body.node_ids or await registry.active_node_ids()
+    dispatch = await _dispatch_to_nodes(command, target_ids)
+    response = {
+        "ok": True,
+        "preload_requested": True,
+        "show_id": body.show_id,
+        "asset_count": len(body.assets),
+        "dispatch": dispatch,
+    }
+    command_ledger.finalize_request("preload_show", body.request_id, response)
     return response
 
 
