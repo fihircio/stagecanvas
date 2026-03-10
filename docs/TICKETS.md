@@ -25,6 +25,27 @@ Checks:
 Deliverable:
 - [x] branch + handoff note
 
+## SC-046 Drift History Summaries in Operator Snapshot
+
+Ticket: SC-046
+Scope: expose drift history summaries in operator WS snapshot.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_operator_snapshot_reliability.py`
+- `control-ui/lib/types.ts`
+- docs tied to these files
+Out of scope:
+- UI rendering changes
+- schema version changes
+Acceptance:
+- [x] operator WS snapshot includes per-node drift history summary fields
+- [x] summary includes counts + max/avg drift details
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
 ## SC-004 Persistent Idempotency Ledger
 
 Ticket: SC-004
@@ -820,6 +841,144 @@ Checks:
 Deliverable:
 - [x] branch + handoff note
 
+## SC-038 Replay Observability in Operator Snapshot
+
+Ticket: SC-038
+Scope: expose per-node command replay and queue-depth counters for live reliability observability.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_replay_observability.py`
+- docs tied to these files
+Out of scope:
+- websocket schema version changes
+- UI presentation changes
+Acceptance:
+- [ ] per-node snapshot includes replay counter and queued command depth
+- [ ] aggregate reliability summary is available in operator snapshot payload
+- [ ] counters are deterministic across reconnect cycles in tests
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-039 Control UI Reliability Panel
+
+Ticket: SC-039
+Scope: add operator-facing reliability panel for replay/queue/reconnect visibility.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- orchestration command dispatch behavior changes
+- protocol/schema changes
+Acceptance:
+- [ ] panel shows per-node replay count, queue depth, and reconnect attempts
+- [ ] non-zero queue/replay state gets clear alert styling
+- [ ] panel updates from operator websocket snapshots without manual refresh
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-040 Preload Cache Lifecycle v2 Contract
+
+Ticket: SC-040
+Scope: extend preload/cache contract with explicit lifecycle states and progress fields.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_preload_lifecycle_contract.py`
+- `render-node/app/state.py`
+- `render-node/tests/test_state.py`
+- docs tied to these files
+Out of scope:
+- real media transfer implementation
+- breaking changes to existing command protocol
+Acceptance:
+- [ ] cache lifecycle states available (`EMPTY`, `LOADING`, `READY`, `FAILED`)
+- [ ] preload progress fields are additive and optional in heartbeat/snapshot payloads
+- [ ] render-node state transitions are covered by deterministic tests
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-041 Preload Multi-Node Reliability Tests
+
+Ticket: SC-041
+Scope: add integration tests for preload success, partial failure, and retry behavior across multiple nodes.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/tests/test_preload_reliability.py`
+Out of scope:
+- UI changes
+- render-node runtime implementation changes beyond test fixtures/mocks
+Acceptance:
+- [ ] success path validates all targeted nodes converge to `READY`
+- [ ] partial failure path reports actionable reason codes and per-node outcomes
+- [ ] retry path validates idempotent behavior with stable request tracking
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-042 PLAY_AT Readiness Gate
+
+Ticket: SC-042
+Scope: enforce preload readiness guard for `PLAY_AT` dispatch to targeted nodes.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_play_at_readiness_gate.py`
+- docs tied to these files
+Out of scope:
+- UI feature work
+- schema version changes
+Acceptance:
+- [ ] `PLAY_AT` rejects targets not in `READY` preload state with actionable reason code
+- [ ] mixed target requests return clear per-node success/failure details
+- [ ] existing idempotency behavior remains intact under readiness failures
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-043 Operator Preload Controls + Readiness UX
+
+Ticket: SC-043
+Scope: add preload controls and readiness status flows in operator UI.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- backend command semantics changes
+- protocol/schema version changes
+Acceptance:
+- [x] operator can trigger preload for all nodes or selected targets
+- [x] node cards show cache lifecycle state and preload progress
+- [x] non-ready nodes are clearly indicated before playback actions
+Checks:
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
 ## SC-044 Drift History Ring Buffer API
 
 Ticket: SC-044
@@ -869,192 +1028,3 @@ Checks:
 - [x] `make sanity`
 Deliverable:
 - [x] branch + handoff note
-
-## SC-046 Drift History Summaries in Operator Snapshot
-
-Ticket: SC-046
-Scope: expose drift history summaries in operator WS snapshot.
-Owner: lead-agent (this chat)
-Files allowed:
-- `orchestration-server/app/registry.py`
-- `orchestration-server/tests/test_operator_snapshot_reliability.py`
-- `control-ui/lib/types.ts`
-- docs tied to these files
-Out of scope:
-- UI rendering changes
-- schema version changes
-Acceptance:
-- [x] operator WS snapshot includes per-node drift history summary fields
-- [x] summary includes counts + max/avg drift details
-Checks:
-- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-Deliverable:
-- [x] branch + handoff note
-
-## SC-046 Drift History Summary in Operator Snapshot
-
-Ticket: SC-046
-Scope: expose compact drift history summaries via operator websocket snapshots.
-Owner: lead-agent (this chat)
-Files allowed:
-- `orchestration-server/app/registry.py`
-- `orchestration-server/app/main.py`
-- `orchestration-server/app/models.py`
-- `orchestration-server/tests/test_operator_drift_history_summary.py`
-- docs tied to these files
-Out of scope:
-- UI chart implementation
-- long-term metrics storage
-Acceptance:
-- [ ] operator snapshot includes per-node drift history summary fields (min/avg/max + sample count)
-- [ ] summary derives from existing ring buffer without extra storage
-- [ ] deterministic tests validate summary math for edge cases (empty/history size 1)
-Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
-
-## SC-047 Media Ingest Registry v1
-
-Ticket: SC-047
-Scope: add media registry metadata model and endpoints for ingest tracking.
-Owner: lead-agent (this chat)
-Files allowed:
-- `orchestration-server/app/models.py`
-- `orchestration-server/app/main.py`
-- `orchestration-server/app/registry.py`
-- `orchestration-server/tests/test_media_registry.py`
-- docs tied to these files
-Out of scope:
-- actual media upload/transfer implementation
-- UI ingestion workflow
-Acceptance:
-- [ ] media registry supports create/list/get/update status for assets
-- [ ] asset entries include codec profile, duration, and size metadata fields
-- [ ] tests cover idempotent asset registration by stable `asset_id`
-Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
-
-## SC-048 Node Asset Transfer Stub
-
-Ticket: SC-048
-Scope: add orchestration-to-node asset transfer stub and status reporting.
-Owner: feature-agent (other chat)
-Files allowed:
-- `orchestration-server/app/main.py`
-- `orchestration-server/app/models.py`
-- `orchestration-server/tests/test_asset_transfer_stub.py`
-- `render-node/app/state.py`
-- `render-node/tests/test_state.py`
-- docs tied to these files
-Out of scope:
-- real file transfer implementation
-- protocol major-version changes
-Acceptance:
-- [ ] transfer command stub emitted per asset with progress callbacks simulated in tests
-- [ ] node cache state updates for transfer in-progress and completed states
-- [ ] orchestration surfaces transfer status in node snapshots
-Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
-
-## SC-049 Render Bridge Integration Path v1
-
-Ticket: SC-049
-Scope: define and validate render-node bridge integration path for real renderer hook-in.
-Owner: lead-agent (this chat)
-Files allowed:
-- `render-node/app/bridge.py`
-- `render-node/app/agent.py`
-- `render-node/tests/test_bridge_integration.py`
-- `render-node/README.md`
-Out of scope:
-- production Unity project integration
-- GPU pipeline implementation
-Acceptance:
-- [ ] bridge interface supports load/play/pause/seek/stop with error propagation
-- [ ] mock bridge test validates call order for `LOAD_SHOW` + `PLAY_AT`
-- [ ] integration test validates error path marks node `ERROR`
-Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
-
-## SC-050 Warp/Blend Pipeline Skeleton
-
-Ticket: SC-050
-Scope: introduce mapping config wiring and render-node pipeline hooks for warp/blend.
-Owner: feature-agent (other chat)
-Files allowed:
-- `render-node/app/state.py`
-- `render-node/app/bridge.py`
-- `render-node/tests/test_warp_blend_pipeline.py`
-- `docs/ARCHITECTURE.md`
-Out of scope:
-- real shader/mesh processing
-- UI mapping editor
-Acceptance:
-- [ ] mapping config can be loaded per node and attached to state
-- [ ] render bridge receives mapping config on `LOAD_SHOW`
-- [ ] tests validate config propagation and error handling
-Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
-
-## SC-051 Timeline Editor MVP
-
-Ticket: SC-051
-Scope: add basic timeline editor actions in control UI (tracks + clips CRUD).
-Owner: feature-agent (other chat)
-Files allowed:
-- `control-ui/components/nodes-dashboard.tsx`
-- `control-ui/lib/types.ts`
-- `control-ui/app/globals.css`
-- `control-ui/app/page.tsx`
-Out of scope:
-- complex snapping/drag reordering
-- audio/effects lane features
-Acceptance:
-- [ ] create/update/delete tracks and clips via existing orchestration endpoints
-- [ ] timeline list updates immediately after mutations
-- [ ] optimistic UI errors surfaced with actionable reason
-Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
-
-## SC-052 Mapping Config Model + Validation
-
-Ticket: SC-052
-Scope: define mapping configuration schema and validation rules for warp/blend.
-Owner: lead-agent (this chat)
-Files allowed:
-- `shared-protocol/messages.v1.json`
-- `orchestration-server/app/models.py`
-- `orchestration-server/tests/test_mapping_config_schema.py`
-- docs tied to these files
-Out of scope:
-- UI editor for mapping configuration
-- render-node shader implementation
-Acceptance:
-- [ ] mapping config schema supports per-output mesh + blend params
-- [ ] orchestration validates schema on show update/load
-- [ ] tests cover invalid/missing fields and version compatibility
-Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
-Deliverable:
-- [ ] branch + handoff note
