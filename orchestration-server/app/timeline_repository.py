@@ -4,7 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .models import MappingConfig, TimelineClip, TimelineShowSummary, TimelineSnapshotResponse, TimelineTrack
+from .models import MappingConfig, TimelineClip, TimelineLayer, TimelineShowSummary, TimelineSnapshotResponse, TimelineTrack
 
 
 class TimelineRepository:
@@ -106,25 +106,64 @@ class TimelineRepository:
         duration_ms: int,
         kind: str,
         position: int | None,
+        offset_ms: int | None = None,
+        layers: list[TimelineLayer] | None = None,
     ) -> None:
         with self._connect() as conn:
             if not self._track_exists(conn, show_id, track_id):
                 raise KeyError(f"Track not found: {show_id}/{track_id}")
             resolved_position = position if position is not None else self._next_clip_position(conn, show_id, track_id)
+            resolved_offset = offset_ms if offset_ms is not None else 0
             conn.execute(
                 """
-                INSERT INTO clips(show_id, track_id, clip_id, label, start_ms, duration_ms, kind, position)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO clips(show_id, track_id, clip_id, label, start_ms, duration_ms, kind, position, offset_ms)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(show_id, track_id, clip_id)
                 DO UPDATE SET
                   label = excluded.label,
                   start_ms = excluded.start_ms,
                   duration_ms = excluded.duration_ms,
                   kind = excluded.kind,
-                  position = excluded.position
+                  position = excluded.position,
+                  offset_ms = excluded.offset_ms
                 """,
-                (show_id, track_id, clip_id, label, start_ms, duration_ms, kind, resolved_position),
+                (
+                    show_id,
+                    track_id,
+                    clip_id,
+                    label,
+                    start_ms,
+                    duration_ms,
+                    kind,
+                    resolved_position,
+                    resolved_offset,
+                ),
             )
+            if layers is not None:
+                conn.execute(
+                    "DELETE FROM layers WHERE show_id = ? AND track_id = ? AND clip_id = ?",
+                    (show_id, track_id, clip_id),
+                )
+                for i, layer in enumerate(layers):
+                    transform_json = layer.transform.model_dump_json()
+                    conn.execute(
+                        """
+                        INSERT INTO layers(show_id, track_id, clip_id, layer_id, label, asset_id, opacity, blend_mode, transform_json, position)
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            show_id,
+                            track_id,
+                            clip_id,
+                            layer.layer_id,
+                            layer.label,
+                            layer.asset_id,
+                            layer.opacity,
+                            layer.blend_mode,
+                            transform_json,
+                            i,
+                        ),
+                    )
             conn.commit()
 
     def delete_clip(self, show_id: str, track_id: str, clip_id: str) -> None:
@@ -160,23 +199,46 @@ class TimelineRepository:
             for track in tracks_rows:
                 clip_rows = conn.execute(
                     """
-                    SELECT clip_id, label, start_ms, duration_ms, kind
+                    SELECT clip_id, label, start_ms, duration_ms, kind, offset_ms
                     FROM clips
                     WHERE show_id = ? AND track_id = ?
                     ORDER BY position, clip_id
                     """,
                     (show_id, track["track_id"]),
                 ).fetchall()
-                clips = [
-                    TimelineClip(
-                        clip_id=row["clip_id"],
-                        label=row["label"],
-                        start_ms=row["start_ms"],
-                        duration_ms=row["duration_ms"],
-                        kind=row["kind"],
+                clips = []
+                for row in clip_rows:
+                    layer_rows = conn.execute(
+                        """
+                        SELECT layer_id, label, asset_id, opacity, blend_mode, transform_json
+                        FROM layers
+                        WHERE show_id = ? AND track_id = ? AND clip_id = ?
+                        ORDER BY position, layer_id
+                        """,
+                        (show_id, track["track_id"], row["clip_id"]),
+                    ).fetchall()
+                    layers = [
+                        TimelineLayer(
+                            layer_id=l["layer_id"],
+                            label=l["label"],
+                            asset_id=l["asset_id"],
+                            opacity=l["opacity"],
+                            blend_mode=l["blend_mode"],
+                            transform=json.loads(l["transform_json"]) if l["transform_json"] else {},
+                        )
+                        for l in layer_rows
+                    ]
+                    clips.append(
+                        TimelineClip(
+                            clip_id=row["clip_id"],
+                            label=row["label"],
+                            start_ms=row["start_ms"],
+                            duration_ms=row["duration_ms"],
+                            offset_ms=row["offset_ms"],
+                            kind=row["kind"],
+                            layers=layers,
+                        )
                     )
-                    for row in clip_rows
-                ]
                 tracks.append(
                     TimelineTrack(
                         track_id=track["track_id"],
@@ -234,14 +296,34 @@ class TimelineRepository:
                   duration_ms INTEGER NOT NULL CHECK(duration_ms > 0),
                   kind TEXT NOT NULL,
                   position INTEGER NOT NULL DEFAULT 0,
+                  offset_ms INTEGER NOT NULL DEFAULT 0,
                   PRIMARY KEY(show_id, track_id, clip_id),
                   FOREIGN KEY(show_id, track_id) REFERENCES tracks(show_id, track_id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS layers (
+                  show_id TEXT NOT NULL,
+                  track_id TEXT NOT NULL,
+                  clip_id TEXT NOT NULL,
+                  layer_id TEXT NOT NULL,
+                  label TEXT NOT NULL,
+                  asset_id TEXT,
+                  opacity REAL NOT NULL DEFAULT 1.0,
+                  blend_mode TEXT NOT NULL DEFAULT 'normal',
+                  transform_json TEXT,
+                  position INTEGER NOT NULL DEFAULT 0,
+                  PRIMARY KEY(show_id, track_id, clip_id, layer_id),
+                  FOREIGN KEY(show_id, track_id, clip_id) REFERENCES clips(show_id, track_id, clip_id) ON DELETE CASCADE
+                );
                 """
             )
-            columns = {row["name"] for row in conn.execute("PRAGMA table_info(shows)").fetchall()}
-            if "mapping_config_json" not in columns:
+            columns_shows = {row["name"] for row in conn.execute("PRAGMA table_info(shows)").fetchall()}
+            if "mapping_config_json" not in columns_shows:
                 conn.execute("ALTER TABLE shows ADD COLUMN mapping_config_json TEXT")
+
+            columns_clips = {row["name"] for row in conn.execute("PRAGMA table_info(clips)").fetchall()}
+            if "offset_ms" not in columns_clips:
+                conn.execute("ALTER TABLE clips ADD COLUMN offset_ms INTEGER NOT NULL DEFAULT 0")
             conn.commit()
 
     def _seed_demo_show(self) -> None:

@@ -138,6 +138,55 @@
       },
       "required": ["codec_profile", "duration_ms", "size_bytes"],
       "additionalProperties": true
+    },
+    "TimelineLayer": {
+      "type": "object",
+      "properties": {
+        "layer_id": { "type": "string" },
+        "label": { "type": "string" },
+        "asset_id": { "type": ["string", "null"] },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1.0, "default": 1.0 },
+        "blend_mode": { "enum": ["normal", "add", "multiply", "screen"], "default": "normal" },
+        "transform": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "number", "default": 0 },
+            "y": { "type": "number", "default": 0 },
+            "scale_x": { "type": "number", "default": 1 },
+            "scale_y": { "type": "number", "default": 1 }
+          }
+        }
+      },
+      "required": ["layer_id", "label"]
+    },
+    "TimelineClip": {
+      "type": "object",
+      "properties": {
+        "clip_id": { "type": "string" },
+        "label": { "type": "string" },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 1 },
+        "offset_ms": { "type": "integer", "default": 0 },
+        "kind": { "enum": ["video", "audio", "image", "alpha", "trigger"] },
+        "layers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TimelineLayer" }
+        }
+      },
+      "required": ["clip_id", "label", "start_ms", "duration_ms"]
+    },
+    "TimelineTrack": {
+      "type": "object",
+      "properties": {
+        "track_id": { "type": "string" },
+        "label": { "type": "string" },
+        "kind": { "enum": ["video", "audio", "image", "alpha", "trigger"] },
+        "clips": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TimelineClip" }
+        }
+      },
+      "required": ["track_id", "label"]
     }
   }
 }

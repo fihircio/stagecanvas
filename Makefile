@@ -1,4 +1,4 @@
-.PHONY: sanity sanity-alt check render-test render-compile render-smoke
+.PHONY: sanity sanity-alt check render-test render-compile render-smoke interaction-run
 
 sanity:
 	./scripts/dev-sanity.sh
@@ -20,3 +20,6 @@ render-compile:
 
 render-smoke:
 	./scripts/render-smoke.sh
+
+interaction-run:
+	python interaction-engine/app/main.py

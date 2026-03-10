@@ -13,6 +13,8 @@ import httpx
 import websockets
 
 from .bridge import Decoder, MockUnityBridge, NullDecoder, NullRendererBridge, RendererBridge
+from .renderer_gpu import WebGPURendererBridge
+from .decoder_webcodecs import WebCodecsDecoder
 from .state import CommandType, NodeState
 
 SUPPORTED_COMMANDS: set[str] = {"LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"}
@@ -35,6 +37,13 @@ class TimeSyncClock:
 
     def now_ms(self, system_now_ms: int | None = None) -> int:
         base = system_now_ms if system_now_ms is not None else int(time.time() * 1000)
+        
+        # Simulate PTP jitter if source is ptp
+        if self.source == "ptp":
+            import random
+            jitter = random.uniform(-0.5, 0.5)
+            return int(base + self.offset_ms + jitter)
+            
         return int(base + self.offset_ms)
 
     @classmethod
@@ -45,7 +54,8 @@ class TimeSyncClock:
         if normalized == "ntp":
             return cls(source="ntp", offset_ms=3.5)
         if normalized == "ptp":
-            return cls(source="ptp", offset_ms=1.0)
+            # In a real PTP client, this would be updated dynamically based on sync messages
+            return cls(source="ptp", offset_ms=1.5)
         return cls(source="system", offset_ms=0.0)
 
 
@@ -210,13 +220,29 @@ class RenderNodeAgent:
                 return
 
     async def playback_loop(self) -> None:
-        last = int(time.time() * 1000)
+        target_interval = self.tick_interval_sec
+        next_tick = time.perf_counter()
+        last_system_ms = time.time() * 1000
+        
         while not self._stop_event.is_set():
-            now = int(time.time() * 1000)
-            await self.state.tick(max(0, now - last))
-            last = now
-            if await self._sleep_or_stop(self.tick_interval_sec):
-                return
+            system_now_ms = time.time() * 1000
+            dt_ms = system_now_ms - last_system_ms
+            await self.state.tick(max(0, dt_ms))
+            last_system_ms = system_now_ms
+            
+            next_tick += target_interval
+            sleep_time = next_tick - time.perf_counter()
+            
+            if sleep_time > 0:
+                if await self._sleep_or_stop(sleep_time):
+                    return
+            elif sleep_time < -target_interval:
+                # Drifted too far, reset sync point
+                next_tick = time.perf_counter()
+                await asyncio.sleep(0) # Yield
+            else:
+                # Behind, skip sleep and yield
+                await asyncio.sleep(0)
 
     async def ws_command_loop(self) -> None:
         ws_base = self.base_url.replace("http://", "ws://").replace("https://", "wss://")
@@ -389,7 +415,8 @@ async def main() -> None:
     parser.add_argument("--node-id", default="render-node-1")
     parser.add_argument("--label", default="Render Node 1")
     parser.add_argument("--outputs", type=int, default=1)
-    parser.add_argument("--bridge", choices=["null", "mock-unity"], default="null")
+    parser.add_argument("--bridge", choices=["null", "mock-unity", "gpu"], default="null")
+    parser.add_argument("--decoder", choices=["null", "webcodecs"], default="null")
     parser.add_argument(
         "--log-state-every-sec",
         type=float,
@@ -397,7 +424,7 @@ async def main() -> None:
         help="Print render-node diagnostics JSON at interval; 0 disables periodic logs.",
     )
     parser.add_argument("--heartbeat-interval-sec", type=float, default=1.0)
-    parser.add_argument("--tick-interval-sec", type=float, default=0.2)
+    parser.add_argument("--tick-interval-sec", type=float, default=0.0166)
     parser.add_argument("--ws-reconnect-initial-sec", type=float, default=1.0)
     parser.add_argument("--ws-reconnect-max-sec", type=float, default=8.0)
     parser.add_argument(
@@ -446,8 +473,16 @@ async def main() -> None:
     bridge: RendererBridge
     if args.bridge == "mock-unity":
         bridge = MockUnityBridge()
+    elif args.bridge == "gpu":
+        bridge = WebGPURendererBridge()
     else:
         bridge = NullRendererBridge()
+
+    decoder: Decoder
+    if args.decoder == "webcodecs":
+        decoder = WebCodecsDecoder()
+    else:
+        decoder = NullDecoder()
 
     agent = RenderNodeAgent(
         base_url=args.base_url,
@@ -455,6 +490,7 @@ async def main() -> None:
         label=args.label,
         outputs=args.outputs,
         bridge=bridge,
+        decoder=decoder,
         log_state_every_sec=args.log_state_every_sec,
         heartbeat_interval_sec=args.heartbeat_interval_sec,
         tick_interval_sec=args.tick_interval_sec,

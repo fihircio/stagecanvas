@@ -1515,3 +1515,340 @@ Checks:
  [x] `make sanity`
 Deliverable:
  [x] branch + handoff note
+
+## SC-073 Real Timeline Model Migration
+
+Ticket: SC-073
+Scope: transition from simple show/clip stubs to a granular, hierarchical timeline model.
+Owner: lead-agent (this chat)
+Files allowed:
+- `shared-protocol/messages.v1.json`
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_timeline_model_v2.py`
+Out of scope:
+- rendering engine changes
+- UI layout overhaul
+Acceptance:
+- [x] timeline supports multiple tracks and overlapping clips
+- [x] clip metadata includes asset reference and timing offsets
+- [x] orchestration persists and serves v2 timeline schema
+- [x] migration path or clean-state validation for existing shows
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-074 Frame-Accurate Playback Scheduler
+
+Ticket: SC-074
+Scope: replace fixed 0.2s tick loop with a high-precision scheduler for sync playback.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/app/state.py`
+- `render-node/tests/test_precision_scheduler.py`
+Out of scope:
+- real GPU rendering
+- protocol version changes
+Acceptance:
+- [x] playback tick interval scales dynamically with system clock
+- [x] drift correction logic maintains < 2ms error for OK status
+- [x] scheduler handles transport state transitions (PAUSE/SEEK) with high precision
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-075 WebGPU Renderer Core
+
+Ticket: SC-075
+Scope: initialize a real GPU compositing engine for node rendering.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/bridge.py`
+- `render-node/app/renderer_gpu.py`
+- `render-node/tests/test_gpu_renderer.py`
+Out of scope:
+- real video decoding
+- UI mapping editor
+Acceptance:
+- [x] RendererBridge implementation successfully initializes WebGPU context (or equivalent)
+- [x] layers are composited as GPU textures with basic blend modes
+- [x] renderer emits frame results to a local memory buffer for verification
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-076 WebCodecs Video Decoding Engine
+
+Ticket: SC-076
+Scope: implement low-latency video decoding replacing existing NullDecoder.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/bridge.py`
+- `render-node/app/decoder_webcodecs.py`
+- `render-node/tests/test_video_decoder.py`
+Out of scope:
+- complex transcoding
+- multi-output mapping
+Acceptance:
+- [x] Decoder implementation successfully decodes H.264/HAP sequences
+- [x] decoded frames are available as GPU-ready textures
+- [x] decoder handles seek and loop states correctly
+Checks:
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-077 AI Interaction Engine (YOLO/Pose)
+
+Ticket: SC-077
+Scope: integrate AI-powered vision triggers as the project USP.
+Owner: feature-agent (other chat)
+Files allowed:
+- `interaction-engine/app.py`
+- `interaction-engine/detectors/yolo.py`
+- `interaction-engine/detectors/pose.py`
+- `orchestration-server/app/main.py`
+Out of scope:
+- real-time video low-latency streaming to UI
+- complex gesture training
+Acceptance:
+- [x] detection service correctly identifies YOLO objects or Pose positions
+- [x] detection events trigger registered cues in orchestration-server
+- [x] latency from detection to trigger emission is within acceptable bounds (<100ms)
+Checks:
+- [x] `python -m compileall interaction-engine`
+- [x] `make sanity`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-078 WebGPU Mesh Warping (Mapping Engine)
+
+Ticket: SC-078
+Scope: Implement grid and bezier warping inside the WebGPU pipeline to distort outputs.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/renderer_gpu.py`
+- `render-node/app/mapping/warp_mesh.py`
+- `render-node/tests/test_warp_mesh.py`
+Out of scope:
+- UI Mapping Editor integration
+Acceptance:
+- [ ] Render pipeline accepts mesh geometry data (UV maps / vertices).
+- [ ] Textures are successfully mapped across the distorted grid.
+- [ ] Performance remains stable (<2ms latency addition).
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-079 WebGPU Edge Blending & Masks (Mapping Engine)
+
+Ticket: SC-079
+Scope: Support alpha masks and gradient edge blending for multi-projector setups.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/renderer_gpu.py`
+- `render-node/app/mapping/edge_blend.py`
+- `render-node/tests/test_edge_blend.py`
+Out of scope:
+- Multi-GPU communication
+Acceptance:
+- [ ] Renderer pipeline applies soft-edge blend masks to the final composited texture.
+- [ ] Alpha masking for custom stage shapes works via projected shapes.
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-080 OSC Server Integration (IO Engine)
+
+Ticket: SC-080
+Scope: Allow external lighting desks and triggers via Open Sound Control (OSC).
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/io/osc_server.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_osc_server.py`
+Out of scope:
+- MIDI
+Acceptance:
+- [ ] OSC Server runs alongside the API server.
+- [ ] Maps incoming OSC UDP packets to the internal trigger/cue REST API.
+- [ ] Secure/bound to configurable port (default 8000).
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-081 MIDI Control Engine (IO Engine)
+
+Ticket: SC-081
+Scope: Support MIDI hardware mapping for tactile control and triggers.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/io/midi_handler.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_midi_handler.py`
+Out of scope:
+- WebMIDI in UI
+Acceptance:
+- [ ] Application connects to active MIDI devices.
+- [ ] MIDI CC messages route to layer opacity or transformations.
+- [ ] MIDI Note messages trigger cues.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-082 Precision Time Protocol (PTP) Sync Stub
+
+Ticket: SC-082
+Scope: Migrate local time sync to an abstract PTP sync provider for multi-node lock.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/sync_manager.py`
+- `render-node/app/agent.py`
+- `render-node/tests/test_ptp_sync.py`
+Out of scope:
+- Kernel driver integration
+Acceptance:
+- [ ] PTP Clock abstraction implemented.
+- [ ] Calculates true drift across the network, accounting for latency jitter.
+- [ ] Plugs directly into the Frame-Accurate Playback Scheduler (SC-074).
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-083 Node-Graph Designer Frontend (React)
+
+Ticket: SC-083
+Scope: Evolve the editor to a visual node-based programming model bridging UI to AI triggers.
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/node-graph.tsx`
+- `control-ui/app/designer/page.tsx`
+- `control-ui/package.json`
+Out of scope:
+- Advanced timeline lanes UI
+Acceptance:
+- [ ] Implementation of `reactflow` (or similar) canvas.
+- [ ] Visual blocks for "Camera Input", "YOLO Trigger", "Play Clip".
+- [ ] Edges drawn between blocks compile to a Show Rule JSON sent to the orchestrator.
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-084 ArtNet / DMX Control Engine (IO Engine)
+
+Ticket: SC-084
+Scope: Allow lighting consoles to control the media server natively over DMX.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/io/artnet_server.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_artnet_server.py`
+Out of scope:
+- Full Fixture Profile generation
+Acceptance:
+- [ ] ArtNet listener daemon runs in the background on port 6454.
+- [ ] DMX Universe/Channel combinations map dynamically to Layer properties (Opacity, Speed, Play/Pause).
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-085 NDI / Spout Output Integration
+
+Ticket: SC-085
+Scope: Enterprise video routing capabilities without physical capture cards.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/output/ndi_sender.py`
+- `render-node/app/renderer_gpu.py`
+- `render-node/tests/test_ndi_sender.py`
+Out of scope:
+- NDI Ingest (Inputs)
+Acceptance:
+- [ ] Extends the WebGPU pipeline to push the final composited frame to an NDI sender stream.
+- [ ] NDI stream is discoverable on the local network.
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-086 Hardware Genlock Sync Stub
+
+Ticket: SC-086
+Scope: Sub-frame synchronization across multiple physical LED walls via hardware sync pulses.
+Owner: lead-agent (this chat)
+Files allowed:
+- `render-node/app/sync_genlock.py`
+- `render-node/app/renderer_gpu.py`
+- `render-node/tests/test_sync_genlock.py`
+Out of scope:
+- Direct Quadro/Decklink driver API integration (mock only)
+Acceptance:
+- [ ] Renderer tick loop holds frame flip until Genlock pulse is received.
+- [ ] Drift metrics correctly account for Genlock holding time.
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-087 Redundancy & Auto-Failover
+
+Ticket: SC-087
+Scope: Implement Primary/Backup heartbeating for orchestration reliability.
+Owner: lead-agent (this chat)
+Files allowed:
+- `orchestration-server/app/cluster_manager.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_failover.py`
+Out of scope:
+- Multi-master active-active writing
+Acceptance:
+- [ ] Backup node monitors Primary via dedicated heartbeat endpoint.
+- [ ] Backup promotes to Primary within 3 seconds of Primary failure.
+- [ ] Render-nodes gracefully reconnect to the promoted Backup.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-088 WebRTC Browser Monitoring
+
+Ticket: SC-088
+Scope: Allow operators to view the live rendering output inside the Next.js control UI.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/output/webrtc_stream.py`
+- `control-ui/components/live-monitor.tsx`
+- `control-ui/package.json`
+Out of scope:
+- Public internet relay (STUN/TURN handling)
+Acceptance:
+- [ ] Render node encodes its output map to a lightweight WebRTC stream.
+- [ ] Control UI dashboard can connect to the local stream and display moving video at >15 fps.
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+Deliverable:
+- [ ] branch + handoff note

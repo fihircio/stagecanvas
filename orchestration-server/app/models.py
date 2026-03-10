@@ -27,6 +27,22 @@ class MappingBlend(BaseModel):
     black_level: float = Field(default=0.0, ge=0.0)
 
 
+class TimelineLayerTransform(BaseModel):
+    x: float = 0.0
+    y: float = 0.0
+    scale_x: float = 1.0
+    scale_y: float = 1.0
+
+
+class TimelineLayer(BaseModel):
+    layer_id: str
+    label: str
+    asset_id: str | None = None
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    blend_mode: Literal["normal", "add", "multiply", "screen"] = "normal"
+    transform: TimelineLayerTransform = Field(default_factory=TimelineLayerTransform)
+
+
 class MappingMesh(BaseModel):
     vertices: list[float] = Field(min_length=6)
     uvs: list[float] = Field(min_length=6)
@@ -152,7 +168,9 @@ class TimelineClip(BaseModel):
     label: str
     start_ms: int = Field(ge=0)
     duration_ms: int = Field(gt=0)
+    offset_ms: int = Field(default=0, ge=0)
     kind: Literal["video", "audio", "image", "alpha", "trigger"] = "video"
+    layers: list[TimelineLayer] = Field(default_factory=list)
 
 
 class TimelineTrack(BaseModel):
@@ -301,7 +319,9 @@ class TimelineUpsertClipRequest(BaseModel):
     label: str = Field(min_length=1)
     start_ms: int = Field(ge=0)
     duration_ms: int = Field(gt=0)
+    offset_ms: int | None = Field(default=None, ge=0)
     kind: Literal["video", "audio", "image", "alpha", "trigger"] = "video"
+    layers: list[TimelineLayer] | None = None
     position: int | None = Field(default=None, ge=0)
     order: int | None = Field(default=None, ge=0)
 

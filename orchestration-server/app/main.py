@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import time
 from contextlib import suppress
 from email.parser import BytesParser
@@ -41,6 +42,8 @@ from .models import (
 from .command_ledger import CommandLedger
 from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask, TranscodeQueue
 from .timeline_repository import TimelineRepository
+from .io.osc_server import OSCServer
+from .io.midi_handler import MIDIHandler
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
@@ -60,6 +63,8 @@ trigger_rules: dict[str, TriggerRule] = {}
 trigger_events: list[TriggerEvent] = []
 TRIGGER_EVENT_LIMIT = 200
 preview_image_last_request: dict[str, int] = {}
+osc_server: OSCServer | None = None
+midi_handler: MIDIHandler | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,16 +82,53 @@ async def _transfer_loop() -> None:
 
 @app.on_event("startup")
 async def _startup() -> None:
+    global osc_server, midi_handler
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
+    
+    # Internal trigger callback for OSC
+    async def osc_trigger_callback(payload: dict):
+        # We simulate firing the trigger internally
+        body = TriggerFireRequest(**payload)
+        rule = trigger_rules.get(body.rule_id)
+        if rule is not None:
+            event = TriggerEvent(
+                event_id=f"evt-{body.rule_id}-{int(time.time() * 1000)}",
+                rule_id=rule.rule_id,
+                source="osc",
+                cue_id=rule.cue_id,
+                payload={**rule.payload, **body.payload},
+                timestamp_ms=int(time.time() * 1000),
+            )
+            trigger_events.append(event)
+            if len(trigger_events) > TRIGGER_EVENT_LIMIT:
+                del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
+                
+    osc_port = int(os.environ.get("OSC_PORT", 8000))
+    osc_server = OSCServer(host="0.0.0.0", port=osc_port, trigger_callback=osc_trigger_callback)
+    await osc_server.start()
+
+    # CC callback for MIDI
+    async def midi_cc_callback(control: int, value: int):
+        # We could use this to update node/layer state. 
+        # For now, we print a log to simulate the connection.
+        print(f"[main] Received MIDI CC {control} = {value}")
+
+    midi_handler = MIDIHandler(trigger_callback=osc_trigger_callback, cc_callback=midi_cc_callback)
+    midi_handler.start(asyncio.get_running_loop())
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    global osc_server, midi_handler
     task = getattr(app.state, "transfer_task", None)
     if task is not None:
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+    if osc_server:
+        osc_server.stop()
+    if midi_handler:
+        midi_handler.stop()
 
 
 @app.get("/health")
@@ -443,6 +485,8 @@ async def timeline_upsert_clip(
             duration_ms=body.duration_ms,
             kind=body.kind,
             position=position,
+            offset_ms=body.offset_ms,
+            layers=body.layers,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

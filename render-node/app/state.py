@@ -105,14 +105,14 @@ class NodeState:
     label: str
     show_id: str | None = "demo-show"
     status: NodeStatus = "READY"
-    position_ms: int = 0
+    position_ms: float = 0.0
     drift_ms: float = 0.0
     dropped_frames: int = 0
     cpu_pct: float = 18.0
     gpu_pct: float = 26.0
     fps: float = 60.0
     last_seq: int = 0
-    scheduled_play_time_ms: int | None = None
+    scheduled_play_time_ms: float | None = None
     cache_show_id: str | None = None
     cache_preload_state: Literal["EMPTY", "LOADING", "READY", "FAILED"] = "EMPTY"
     cache_asset_total: int = 0
@@ -301,8 +301,8 @@ class NodeState:
                 self.playback_started_ms = None
                 bridge_call = ("pause", {})
             elif command == "SEEK":
-                self.position_ms = int(payload.get("position_ms", self.position_ms))
-                bridge_call = ("seek", {"position_ms": self.position_ms})
+                self.position_ms = float(payload.get("position_ms", self.position_ms))
+                bridge_call = ("seek", {"position_ms": int(self.position_ms)})
             elif command == "STOP":
                 self.status = "READY"
                 self.position_ms = 0
@@ -356,11 +356,10 @@ class NodeState:
             async with self._lock:
                 self.command_history.append(history)
 
-    async def tick(self, dt_ms: int) -> None:
-        now = int(time.time() * 1000)
-        snapshot: dict[str, Any] | None = None
+    async def tick(self, dt_ms: float) -> None:
+        now_ms = time.time() * 1000
         async with self._lock:
-            if self.scheduled_play_time_ms is not None and now >= self.scheduled_play_time_ms:
+            if self.scheduled_play_time_ms is not None and now_ms >= self.scheduled_play_time_ms:
                 self.status = "PLAYING"
                 self.scheduled_play_time_ms = None
 
@@ -369,10 +368,15 @@ class NodeState:
                 self.fps = 59.7
                 self.cpu_pct = min(65.0, self.cpu_pct + 0.8)
                 self.gpu_pct = min(88.0, self.gpu_pct + 0.9)
-                self.drift_ms = ((now % 7) - 3) * 0.4
-                if self.playback_started_ms is None:
-                    self.playback_started_ms = now
-                self.playback_accumulator_ms += dt_ms
+                # Drift relative to system clock if we were supposed to start at scheduled_play_time_ms
+                if self.playback_started_ms is not None:
+                    expected_position = now_ms - self.playback_started_ms
+                    self.drift_ms = self.position_ms - expected_position
+                else:
+                    self.playback_started_ms = now_ms
+                    self.drift_ms = 0.0
+
+                self.playback_accumulator_ms += int(dt_ms)
                 while self.playback_accumulator_ms >= self.playback_frame_interval_ms:
                     self.playback_frames_emitted += 1
                     self.playback_accumulator_ms -= self.playback_frame_interval_ms
