@@ -44,6 +44,8 @@ from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, Transfer
 from .timeline_repository import TimelineRepository
 from .io.osc_server import OSCServer
 from .io.midi_handler import MIDIHandler
+from .io.artnet_server import ArtNetServer, ArtNetToLayerMapper
+from .cluster_manager import ClusterManager
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
@@ -65,6 +67,8 @@ TRIGGER_EVENT_LIMIT = 200
 preview_image_last_request: dict[str, int] = {}
 osc_server: OSCServer | None = None
 midi_handler: MIDIHandler | None = None
+artnet_server: ArtNetServer | None = None
+cluster_manager: ClusterManager | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,7 +86,7 @@ async def _transfer_loop() -> None:
 
 @app.on_event("startup")
 async def _startup() -> None:
-    global osc_server, midi_handler
+    global osc_server, midi_handler, artnet_server, cluster_manager
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
     
     # Internal trigger callback for OSC
@@ -116,10 +120,30 @@ async def _startup() -> None:
     midi_handler = MIDIHandler(trigger_callback=osc_trigger_callback, cc_callback=midi_cc_callback)
     midi_handler.start(asyncio.get_running_loop())
 
+    # Layer update callback for ArtNet
+    async def artnet_update_callback(layers: list[dict[str, Any]]):
+        command = ControlCommand(
+            version=PROTOCOL_VERSION,
+            command="UPDATE_LAYERS",
+            payload={"layers": layers},
+            seq=command_ledger.next_seq(),
+            origin="artnet",
+        )
+        await broadcast_command(command)
+
+    artnet_mapper = ArtNetToLayerMapper(update_callback=artnet_update_callback)
+    artnet_server = ArtNetServer(dmx_callback=artnet_mapper.handle_dmx)
+    await artnet_server.start()
+
+    role = os.environ.get("CLUSTER_ROLE", "PRIMARY").upper()
+    primary_url = os.environ.get("PRIMARY_URL")
+    cluster_manager = ClusterManager(role=role, primary_url=primary_url)
+    await cluster_manager.start()
+
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
-    global osc_server, midi_handler
+    global osc_server, midi_handler, artnet_server, cluster_manager
     task = getattr(app.state, "transfer_task", None)
     if task is not None:
         task.cancel()
@@ -129,11 +153,20 @@ async def _shutdown() -> None:
         osc_server.stop()
     if midi_handler:
         midi_handler.stop()
+    if artnet_server:
+        artnet_server.stop()
+    if cluster_manager:
+        await cluster_manager.stop()
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "role": cluster_manager.role if cluster_manager else "unknown"}
+
+
+@app.get("/api/v1/cluster/heartbeat")
+async def cluster_heartbeat() -> dict[str, str]:
+    return {"status": "ok", "role": cluster_manager.role if cluster_manager else "unknown"}
 
 
 @app.post("/api/v1/nodes/register")

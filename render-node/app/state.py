@@ -11,7 +11,7 @@ from typing import Any, Literal
 from .bridge import Decoder, NullDecoder, NullRendererBridge, RendererBridge
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
-CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
+CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS"]
 
 
 @dataclass
@@ -313,6 +313,8 @@ class NodeState:
                 bridge_call = ("stop", {})
             elif command == "PING":
                 bridge_call = ("ping", {})
+            elif command == "UPDATE_LAYERS":
+                bridge_call = ("update_layers", {"layers": payload.get("layers", [])})
 
         if bridge_call is None:
             return

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 import wgpu
 from .bridge import RendererBridge
+from .output.ndi_sender import NDISender
+from .output.webrtc_stream import WebRTCStreamer
+from .sync_genlock import GenlockSync
 
 # Vertex shader with dynamic buffers
 VERTEX_SHADER = """
@@ -51,6 +55,10 @@ class WebGPURendererBridge(RendererBridge):
         self.canvas = None
         self.pipeline = None
         self.is_connected = False
+        self.ndi = NDISender()
+        self.webrtc = WebRTCStreamer()
+        self.genlock = GenlockSync()
+        self.frame_data_stub = b"\x00" * 1024 # Stub frame data
 
     async def connect(self, node_id: str, label: str) -> None:
         print(f"[gpu-renderer] Connecting {node_id} ({label})...")
@@ -65,8 +73,12 @@ class WebGPURendererBridge(RendererBridge):
         # In a real app, we would create a window/canvas here.
         # For this implementation, we simulate the setup.
         self._setup_pipeline()
+        
+        self.ndi.start()
+        self.webrtc.start()
+        
         self.is_connected = True
-        print(f"[gpu-renderer] Connected and pipeline initialized.")
+        print(f"[gpu-renderer] Connected and pipeline initialized with NDI and WebRTC.")
 
     def _setup_pipeline(self):
         vshader = self.device.create_shader_module(code=VERTEX_SHADER)
@@ -127,7 +139,7 @@ class WebGPURendererBridge(RendererBridge):
         # Build initial edge mask (white mask so no blending initially)
         self.mask_data = generate_edge_blend_mask(1024, 1024)
         
-        print(f"[gpu-renderer] Setting mapping config: {json.dumps(mapping_config)[:100]}...")
+        # print(f"[gpu-renderer] Setting mapping config: {json.dumps(mapping_config)[:100]}...")
 
     async def load_show(self, show_id: str, payload: dict[str, Any]) -> None:
         print(f"[gpu-renderer] Loading show {show_id}...")
@@ -148,9 +160,38 @@ class WebGPURendererBridge(RendererBridge):
         pass
 
     async def tick(self, snapshot: dict[str, Any]) -> None:
-        # This is where the actual rendering would happen every frame.
-        pass
+        """
+        Main render tick.
+        1. Wait for genlock pulse.
+        2. Render frame (simulated).
+        3. Push to outputs (NDI, WebRTC).
+        4. Correlate drift.
+        """
+        if not self.is_connected:
+            return
+
+        # Phase 1: Wait for hardware genlock pulse
+        hold_time_ms = await self.genlock.wait_for_pulse()
+        
+        # Phase 2: Simulating WebGPU Render Pass
+        # In real code: device.queue.submit([encoder.finish()])
+        
+        # Phase 3: Push to Broadcast Outputs
+        self.ndi.send_frame(self.frame_data_stub)
+        self.webrtc.push_frame(self.frame_data_stub)
+
+        # Phase 4: Drift metrics correlation (SC-086)
+        # We add the genlock hold time to the node's reported drift metrics
+        genlock_metrics = self.genlock.get_metrics()
+        snapshot.update(genlock_metrics)
+        
+        # If we held for a long time, it might show up as drift in the orchestrator
+        # but here we identify it as intentional genlock wait.
+        if hold_time_ms > 1.0:
+            snapshot["last_tick_genlock_wait_ms"] = hold_time_ms
 
     async def close(self) -> None:
         print(f"[gpu-renderer] Closing.")
+        self.ndi.stop()
+        self.webrtc.stop()
         self.is_connected = False

@@ -30,6 +30,9 @@ class RendererBridge(ABC):
     async def stop(self) -> None: ...
 
     @abstractmethod
+    async def update_layers(self, layers: list[dict[str, Any]]) -> None: ...
+
+    @abstractmethod
     async def ping(self) -> None: ...
 
     @abstractmethod
@@ -83,6 +86,9 @@ class NullRendererBridge(RendererBridge):
     async def stop(self) -> None:
         return
 
+    async def update_layers(self, layers: list[dict[str, Any]]) -> None:
+        return
+
     async def ping(self) -> None:
         return
 
@@ -126,6 +132,9 @@ class MockUnityBridge(RendererBridge):
 
     async def stop(self) -> None:
         await self._emit({"event": "stop"})
+
+    async def update_layers(self, layers: list[dict[str, Any]]) -> None:
+        await self._emit({"event": "update_layers", "layers": layers})
 
     async def ping(self) -> None:
         await self._emit({"event": "ping"})
