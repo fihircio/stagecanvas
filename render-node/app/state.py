@@ -417,6 +417,7 @@ class NodeState:
                     "gpu_pct": self.gpu_pct,
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
+                    "genlock": self.genlock.get_metrics(),
                 },
                 "cache": {
                     "show_id": self.cache_show_id,
@@ -447,6 +448,7 @@ class NodeState:
                     "gpu_pct": self.gpu_pct,
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
+                    "genlock": self.genlock.get_metrics(),
                 },
                 "command_history_size": len(self.command_history),
                 "command_history_limit": self.command_history.maxlen,

@@ -17,9 +17,12 @@ class GenlockSync:
 
     async def wait_for_pulse(self) -> float:
         """
-        Wait for a simulated genlock pulse.
-        Returns the hold time in milliseconds.
+        Stub: Simulate waiting for a VSync/hardware pulse.
+        In a real implementation, this would block until a GPU/SDI interrupt.
         """
+        # Yield to event loop, but don't add forced latency in the stub
+        # to allow precision tests to pass.
+        await asyncio.sleep(0)
         now = time.perf_counter()
         elapsed = now - self.last_pulse_time
         

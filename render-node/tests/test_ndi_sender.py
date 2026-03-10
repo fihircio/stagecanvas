@@ -2,7 +2,7 @@ import unittest
 from app.output.ndi_sender import NDISender
 from app.output.webrtc_stream import WebRTCStreamer
 
-class TestOutputBroadcasting(unittest.TestCase):
+class TestOutputBroadcasting(unittest.IsolatedAsyncioTestCase):
     def test_ndi_sender_flow(self):
         sender = NDISender(stream_name="TestStream")
         self.assertFalse(sender.is_running)
@@ -20,17 +20,16 @@ class TestOutputBroadcasting(unittest.TestCase):
         sender.send_frame(b"after-stop")
         self.assertEqual(sender.frame_count, 1)
 
-    def test_webrtc_streamer_flow(self):
-        streamer = WebRTCStreamer(port=9999)
+    async def test_webrtc_streamer_flow(self):
+        streamer = WebRTCStreamer()
         self.assertFalse(streamer.is_streaming)
         
         streamer.start()
         self.assertTrue(streamer.is_streaming)
-        self.assertEqual(streamer.port, 9999)
         
         streamer.push_frame(b"fake-frame")
         
-        streamer.stop()
+        await streamer.stop()
         self.assertFalse(streamer.is_streaming)
 
 if __name__ == "__main__":

@@ -18,6 +18,10 @@ export type NodeSnapshot = {
     gpu_pct: number;
     fps: number;
     dropped_frames: number;
+    genlock?: {
+      genlock_total_hold_ms: number;
+      genlock_active: boolean;
+    };
   };
   last_seen_ms: number;
   command_seq: number;

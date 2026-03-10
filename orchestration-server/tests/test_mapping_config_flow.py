@@ -50,14 +50,17 @@ class MappingConfigFlowTests(unittest.TestCase):
             "outputs": [
                 {
                     "output_id": "out-1",
+                    "target_node_id": None,
                     "mesh": {
                         "vertices": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
                         "uvs": [0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
                         "indices": [0, 1, 2],
                     },
                     "blend": {"gamma": 1.0, "brightness": 1.0, "black_level": 0.0},
+                    "canvas_region": {"global_x": 0, "global_y": 0, "width": 1920, "height": 1080},
                 }
             ],
+            "fixture_profiles": [],
         }
         show_id = "show-map"
         res = self.client.put(
