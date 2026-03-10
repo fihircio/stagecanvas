@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { DriftSloSnapshot, NodeSnapshot, TimelineSnapshot } from "../lib/types";
+import type {
+  DriftSloSnapshot,
+  NodeSnapshot,
+  PreviewImageEntry,
+  PreviewImageResponse,
+  TimelineSnapshot,
+} from "../lib/types";
 
 type OperatorSnapshotMessage = {
   type: "NODES_SNAPSHOT";
@@ -21,6 +27,16 @@ type CommandResult = {
   detail: string;
   atIso: string;
   requestId: string;
+};
+
+type MappingOutputForm = {
+  outputId: string;
+  vertices: string;
+  uvs: string;
+  indices: string;
+  gamma: string;
+  brightness: string;
+  blackLevel: string;
 };
 
 type PreviewSnapshotEntry = {
@@ -71,13 +87,14 @@ export function NodesDashboard() {
   const [previewTab, setPreviewTab] = useState("combined");
   const [timelineSnapshot, setTimelineSnapshot] = useState<TimelineSnapshot | null>(null);
   const [previewSnapshots, setPreviewSnapshots] = useState<Record<string, PreviewSnapshotEntry>>({});
+  const [previewImages, setPreviewImages] = useState<Record<string, PreviewImageEntry>>({});
   const [previewStatus, setPreviewStatus] = useState<"idle" | "loading" | "error">("idle");
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [dragTrackId, setDragTrackId] = useState<string | null>(null);
   const [dragClipId, setDragClipId] = useState<string | null>(null);
   const [dragClipTrackId, setDragClipTrackId] = useState<string | null>(null);
-  const [mappingJson, setMappingJson] = useState("");
+  const [mappingOutputs, setMappingOutputs] = useState<MappingOutputForm[]>([]);
   const [mappingStatus, setMappingStatus] = useState<"idle" | "saving" | "ok" | "error">("idle");
   const [mappingError, setMappingError] = useState<string | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -191,6 +208,8 @@ export function NodesDashboard() {
     previewTab === "combined" ? null : nodes.find((n) => n.node_id === previewTab) ?? null;
   const activePreviewSnapshot = activePreviewNode ? previewSnapshots[activePreviewNode.node_id] : null;
   const latestPreviewSnapshot = Object.values(previewSnapshots).sort((a, b) => b.timestamp_ms - a.timestamp_ms)[0];
+  const activePreviewImage = activePreviewNode ? previewImages[activePreviewNode.node_id] : null;
+  const latestPreviewImage = Object.values(previewImages).sort((a, b) => b.timestamp_ms - a.timestamp_ms)[0];
   const reliabilityTotals = nodes.reduce(
     (acc, node) => {
       acc.replays += node.replay_count ?? 0;
@@ -210,26 +229,21 @@ export function NodesDashboard() {
   const timelineMarks = [0, 0.25, 0.5, 0.75, 1];
   const snapIntervalMs = 1000;
 
-  const sampleMappingJson = useMemo(
-    () =>
-      JSON.stringify(
+  const sampleMappingConfig = useMemo(
+    () => ({
+      version: "v1",
+      outputs: [
         {
-          version: "v1",
-          outputs: [
-            {
-              output_id: "output-1",
-              mesh: {
-                vertices: [0, 0, 1, 0, 1, 1],
-                uvs: [0, 0, 1, 0, 1, 1],
-                indices: [0, 1, 2],
-              },
-              blend: { gamma: 1.0, brightness: 1.0, black_level: 0.0 },
-            },
-          ],
+          output_id: "output-1",
+          mesh: {
+            vertices: [0, 0, 1, 0, 1, 1],
+            uvs: [0, 0, 1, 0, 1, 1],
+            indices: [0, 1, 2],
+          },
+          blend: { gamma: 1.0, brightness: 1.0, black_level: 0.0 },
         },
-        null,
-        2,
-      ),
+      ],
+    }),
     [],
   );
 
@@ -238,11 +252,63 @@ export function NodesDashboard() {
     return Math.round(value / snapIntervalMs) * snapIntervalMs;
   };
 
-  useEffect(() => {
-    if (!mappingJson) {
-      setMappingJson(sampleMappingJson);
+  const parseNumberList = useCallback((value: string, label: string, integer = false) => {
+    const tokens = value.split(/[\s,]+/).filter(Boolean);
+    if (tokens.length === 0) {
+      throw new Error(`${label} cannot be empty`);
     }
-  }, [mappingJson, sampleMappingJson]);
+    const numbers = tokens.map((token) => (integer ? Number.parseInt(token, 10) : Number.parseFloat(token)));
+    if (numbers.some((num) => !Number.isFinite(num))) {
+      throw new Error(`${label} must be numeric values`);
+    }
+    return numbers;
+  }, []);
+
+  const buildMappingConfig = useCallback(() => {
+    const outputs = mappingOutputs.map((output, index) => {
+      const outputId = output.outputId.trim();
+      if (!outputId) {
+        throw new Error(`Output ${index + 1} missing output_id`);
+      }
+      return {
+        output_id: outputId,
+        mesh: {
+          vertices: parseNumberList(output.vertices, `Output ${index + 1} vertices`),
+          uvs: parseNumberList(output.uvs, `Output ${index + 1} uvs`),
+          indices: parseNumberList(output.indices, `Output ${index + 1} indices`, true),
+        },
+        blend: {
+          gamma: Number.parseFloat(output.gamma || "1"),
+          brightness: Number.parseFloat(output.brightness || "1"),
+          black_level: Number.parseFloat(output.blackLevel || "0"),
+        },
+      };
+    });
+    return { version: "v1", outputs };
+  }, [mappingOutputs, parseNumberList]);
+
+  const mappingJson = useMemo(() => {
+    try {
+      return JSON.stringify(buildMappingConfig(), null, 2);
+    } catch {
+      return "";
+    }
+  }, [buildMappingConfig]);
+
+  useEffect(() => {
+    if (mappingOutputs.length === 0) {
+      const initial = sampleMappingConfig.outputs.map((output) => ({
+        outputId: output.output_id,
+        vertices: output.mesh.vertices.join(", "),
+        uvs: output.mesh.uvs.join(", "),
+        indices: output.mesh.indices.join(", "),
+        gamma: String(output.blend.gamma),
+        brightness: String(output.blend.brightness),
+        blackLevel: String(output.blend.black_level),
+      }));
+      setMappingOutputs(initial);
+    }
+  }, [mappingOutputs.length, sampleMappingConfig]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -397,8 +463,45 @@ export function NodesDashboard() {
     }
   };
 
+  const onPreviewImage = async () => {
+    setPreviewStatus("loading");
+    setPreviewError(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/preview/image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node_ids: targetNodeIds(), show_id: showId, width: 320, height: 180 }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as PreviewImageResponse;
+      if (!res.ok) {
+        const detail = (payload as unknown as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+        const reason = detail?.reason_code ?? "UNKNOWN_ERROR";
+        throw new Error(`HTTP ${res.status}: ${reason}`);
+      }
+      const next: Record<string, PreviewImageEntry> = {};
+      payload.images.forEach((img) => {
+        next[img.node_id] = img;
+      });
+      setPreviewImages(next);
+      setPreviewStatus("idle");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Preview image failed";
+      setPreviewError(message);
+      setPreviewStatus("error");
+    }
+  };
+
   const onLoadMappingSample = () => {
-    setMappingJson(sampleMappingJson);
+    const initial = sampleMappingConfig.outputs.map((output) => ({
+      outputId: output.output_id,
+      vertices: output.mesh.vertices.join(", "),
+      uvs: output.mesh.uvs.join(", "),
+      indices: output.mesh.indices.join(", "),
+      gamma: String(output.blend.gamma),
+      brightness: String(output.blend.brightness),
+      blackLevel: String(output.blend.black_level),
+    }));
+    setMappingOutputs(initial);
     setMappingError(null);
     setMappingStatus("idle");
   };
@@ -408,10 +511,10 @@ export function NodesDashboard() {
     setMappingError(null);
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(mappingJson) as Record<string, unknown>;
+      parsed = buildMappingConfig() as Record<string, unknown>;
     } catch (error) {
       setMappingStatus("error");
-      setMappingError(error instanceof Error ? error.message : "Invalid JSON");
+      setMappingError(error instanceof Error ? error.message : "Invalid mapping config");
       return;
     }
 
@@ -435,6 +538,31 @@ export function NodesDashboard() {
       setMappingStatus("error");
       setMappingError(message);
     }
+  };
+
+  const updateMappingOutput = (index: number, field: keyof MappingOutputForm, value: string) => {
+    setMappingOutputs((prev) =>
+      prev.map((output, idx) => (idx === index ? { ...output, [field]: value } : output)),
+    );
+  };
+
+  const addMappingOutput = () => {
+    setMappingOutputs((prev) => [
+      ...prev,
+      {
+        outputId: `output-${prev.length + 1}`,
+        vertices: "0, 0, 1, 0, 1, 1",
+        uvs: "0, 0, 1, 0, 1, 1",
+        indices: "0, 1, 2",
+        gamma: "1.0",
+        brightness: "1.0",
+        blackLevel: "0.0",
+      },
+    ]);
+  };
+
+  const removeMappingOutput = (index: number) => {
+    setMappingOutputs((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const reorderTracks = async (fromId: string, toId: string) => {
@@ -745,15 +873,88 @@ export function NodesDashboard() {
         </div>
         <div className="mapping-panel">
           <div className="editor-title">Mapping Config</div>
-          <textarea
-            className="mapping-textarea"
-            value={mappingJson}
-            onChange={(event) => setMappingJson(event.target.value)}
-            rows={10}
-          />
+          <div className="mapping-output-list">
+            {mappingOutputs.map((output, index) => (
+              <div className="mapping-output-card" key={`${output.outputId}-${index}`}>
+                <div className="mapping-output-header">
+                  <input
+                    className="input compact"
+                    value={output.outputId}
+                    onChange={(event) => updateMappingOutput(index, "outputId", event.target.value)}
+                    placeholder="output_id"
+                  />
+                  <button className="btn subtle" onClick={() => removeMappingOutput(index)}>
+                    Remove
+                  </button>
+                </div>
+                <div className="mapping-grid">
+                  <label>
+                    <span>Vertices</span>
+                    <textarea
+                      className="mapping-textarea"
+                      value={output.vertices}
+                      onChange={(event) => updateMappingOutput(index, "vertices", event.target.value)}
+                      rows={2}
+                    />
+                  </label>
+                  <label>
+                    <span>UVs</span>
+                    <textarea
+                      className="mapping-textarea"
+                      value={output.uvs}
+                      onChange={(event) => updateMappingOutput(index, "uvs", event.target.value)}
+                      rows={2}
+                    />
+                  </label>
+                  <label>
+                    <span>Indices</span>
+                    <textarea
+                      className="mapping-textarea"
+                      value={output.indices}
+                      onChange={(event) => updateMappingOutput(index, "indices", event.target.value)}
+                      rows={2}
+                    />
+                  </label>
+                </div>
+                <div className="mapping-blend">
+                  <label>
+                    <span>Gamma</span>
+                    <input
+                      className="input compact"
+                      value={output.gamma}
+                      onChange={(event) => updateMappingOutput(index, "gamma", event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>Brightness</span>
+                    <input
+                      className="input compact"
+                      value={output.brightness}
+                      onChange={(event) => updateMappingOutput(index, "brightness", event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>Black</span>
+                    <input
+                      className="input compact"
+                      value={output.blackLevel}
+                      onChange={(event) => updateMappingOutput(index, "blackLevel", event.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mapping-json">
+            <div className="muted">Generated JSON</div>
+            <textarea className="mapping-textarea" value={mappingJson} readOnly rows={6} />
+          </div>
           <div className="mapping-actions">
             <button className="btn subtle" onClick={onLoadMappingSample}>
               Load Sample
+            </button>
+            <button className="btn subtle" onClick={addMappingOutput}>
+              Add Output
             </button>
             <button className="btn" onClick={onSaveMapping}>
               Save Mapping
@@ -816,11 +1017,21 @@ export function NodesDashboard() {
                     ? `Last preview @ ${new Date(latestPreviewSnapshot.timestamp_ms).toLocaleTimeString()}`
                     : "No preview snapshot yet"}
               </span>
+              <span className="muted">
+                {activePreviewImage
+                  ? `Image @ ${new Date(activePreviewImage.timestamp_ms).toLocaleTimeString()}`
+                  : latestPreviewImage
+                    ? `Last image @ ${new Date(latestPreviewImage.timestamp_ms).toLocaleTimeString()}`
+                    : "No preview image yet"}
+              </span>
             </div>
           </div>
           <div className="preview-controls">
             <button className="btn subtle" onClick={onPreviewSnapshot} disabled={previewStatus === "loading"}>
               {previewStatus === "loading" ? "Previewing..." : "Preview Snapshot"}
+            </button>
+            <button className="btn subtle" onClick={onPreviewImage} disabled={previewStatus === "loading"}>
+              Preview Image
             </button>
             {previewError ? <span className="mapping-error">{previewError}</span> : null}
           </div>

@@ -106,3 +106,4 @@ make render-smoke
 - Cache index stub tracks assets with LRU eviction (`app/state.py`).
 - Cache index is persisted to local JSON and restored on restart (`app/state.py`).
 - Playback stub validates required assets are present in cache before `PLAY_AT`.
+- Decoder stub is invoked on `LOAD_SHOW` and `PLAY_AT` to validate integration hooks (`app/bridge.py`).

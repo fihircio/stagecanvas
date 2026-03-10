@@ -86,3 +86,17 @@ export type PreviewSnapshotResponse = {
   requested_count: number;
   snapshots: PreviewSnapshotEntry[];
 };
+
+export type PreviewImageEntry = {
+  node_id: string;
+  timestamp_ms: number;
+  width: number;
+  height: number;
+  image_data: string;
+};
+
+export type PreviewImageResponse = {
+  ok: boolean;
+  requested_count: number;
+  images: PreviewImageEntry[];
+};
