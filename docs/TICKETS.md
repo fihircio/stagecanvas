@@ -1250,3 +1250,123 @@ Checks:
 - [ ] `make sanity`
 Deliverable:
 - [ ] branch + handoff note
+
+## SC-062 Media Upload API + Local Storage
+
+Ticket: SC-062
+Scope: add media upload endpoint and store files locally for development.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_media_upload.py`
+- docs tied to these files
+Out of scope:
+- production object storage integration
+- UI upload flow
+Acceptance:
+- [ ] `POST /api/v1/media/upload` accepts multipart file uploads
+- [ ] uploads stored under local `orchestration-server/data/media/`
+- [ ] registry entry created with filename, size, and checksum
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-063 Media Transfer Worker v1
+
+Ticket: SC-063
+Scope: implement real file copy from orchestration storage to render-node cache for local dev.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/registry.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_media_transfer_worker.py`
+- `render-node/app/state.py`
+- `render-node/tests/test_state.py`
+- docs tied to these files
+Out of scope:
+- distributed storage or CDN
+- UI workflow changes
+Acceptance:
+- [ ] transfer worker copies files from `orchestration-server/data/media/` to a render-node cache dir
+- [ ] cache state reflects transferred bytes and completion
+- [ ] tests validate file presence and cache metadata update
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-064 Render-Node Local Cache Persistence
+
+Ticket: SC-064
+Scope: persist render-node cache index and restore on restart.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/state.py`
+- `render-node/tests/test_cache_persistence.py`
+- `render-node/README.md`
+Out of scope:
+- cross-node cache sync
+- cloud storage
+Acceptance:
+- [ ] cache index persists to local JSON file
+- [ ] restart restores cache metadata
+- [ ] tests validate persistence and restore accuracy
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-065 Playback Stub Reads Cached Media
+
+Ticket: SC-065
+Scope: extend playback stub to verify cached media presence before playing.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/state.py`
+- `render-node/app/agent.py`
+- `render-node/tests/test_playback_cache_gate.py`
+- `render-node/README.md`
+Out of scope:
+- real decoding pipeline
+- GPU playback
+Acceptance:
+- [ ] `PLAY_AT` fails with reason code if required asset missing from cache
+- [ ] success path verifies cache metadata before playback start
+- [ ] tests cover missing asset and success cases
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-066 Media Profile Metadata + Validation
+
+Ticket: SC-066
+Scope: attach codec/format profile metadata and validate against supported profiles.
+Owner: feature-agent (other chat)
+Files allowed:
+- `shared-protocol/messages.v1.json`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_media_profile_validation.py`
+- docs tied to these files
+Out of scope:
+- transcoding implementation
+- UI profile editor
+Acceptance:
+- [ ] media registry stores codec profile (`HAP`, `HAP-Q`, `ProRes4444`, `H264`)
+- [ ] unsupported profiles rejected with reason code
+- [ ] tests cover acceptance + rejection paths
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
