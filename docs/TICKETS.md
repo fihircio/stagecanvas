@@ -1370,3 +1370,148 @@ Checks:
 - [ ] `make sanity`
 Deliverable:
 - [ ] branch + handoff note
+
+## SC-067 Decoder Integration Stub
+
+Ticket: SC-067
+Scope: add a decoder interface stub and integrate it into the render-node playback path.
+Owner: feature-agent (other chat)
+Files allowed:
+- `render-node/app/agent.py`
+- `render-node/app/state.py`
+- `render-node/app/bridge.py`
+- `render-node/tests/test_decoder_stub.py`
+- `render-node/README.md`
+Out of scope:
+- GPU decoding
+- real codec integration
+Acceptance:
+- [ ] playback path calls decoder stub on `LOAD_SHOW` and `PLAY_AT`
+- [ ] decoder errors propagate to node state (`ERROR`)
+- [ ] tests cover success and failure paths
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-068 Transcoding Queue Stub
+
+Ticket: SC-068
+Scope: add a transcoding job queue stub and status tracking in orchestration.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/registry.py`
+- `orchestration-server/tests/test_transcoding_queue_stub.py`
+- docs tied to these files
+Out of scope:
+- real transcoding pipeline
+- UI workflow
+Acceptance:
+- [ ] media registry can enqueue a transcode job for an asset/profile
+- [ ] job status transitions are persisted in memory (queued/running/done/failed)
+- [ ] tests validate enqueue + status update + query
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-069 Mapping UI Editor v1
+
+Ticket: SC-069
+Scope: add a basic mapping editor panel (forms for outputs, mesh/blend params).
+Owner: feature-agent (other chat)
+Files allowed:
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- `control-ui/app/globals.css`
+Out of scope:
+- drag mesh editor
+- live preview overlays
+Acceptance:
+- [ ] operator can edit per-output mapping params in a form
+- [ ] save sends mapping config to orchestration show update
+- [ ] validation errors display inline
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-070 Preview Image Pipeline Stub
+
+Ticket: SC-070
+Scope: add preview image request/response stub through orchestration.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_preview_image_stub.py`
+- `control-ui/components/nodes-dashboard.tsx`
+- `control-ui/lib/types.ts`
+- docs tied to these files
+Out of scope:
+- real image rendering
+- binary transfer optimization
+Acceptance:
+- [ ] UI can request a preview image and receives a stub payload
+- [ ] orchestration records last preview request time per node
+- [ ] tests validate request/response contract
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `cd control-ui && npm run lint && npm run build`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-071 Time Sync Abstraction
+
+Ticket: SC-071
+Scope: add a time-sync abstraction to support NTP/PTP later.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/models.py`
+- `orchestration-server/app/registry.py`
+- `render-node/app/agent.py`
+- `render-node/tests/test_time_sync_stub.py`
+- docs tied to these files
+Out of scope:
+- actual PTP integration
+- kernel time discipline
+Acceptance:
+- [ ] time sync source can be selected (system/ntp/ptp stub)
+- [ ] drift computation uses the abstraction
+- [ ] tests validate selection and default behavior
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-072 OSC/HTTP Trigger Stub
+
+Ticket: SC-072
+Scope: add basic OSC/HTTP trigger stubs to orchestration for external cues.
+Owner: feature-agent (other chat)
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/models.py`
+- `orchestration-server/tests/test_trigger_stub.py`
+- docs tied to these files
+Out of scope:
+- full trigger routing system
+- security hardening
+Acceptance:
+- [ ] add endpoints to register trigger rules and simulate trigger events
+- [ ] events are recorded in an in-memory log
+- [ ] tests validate register + fire + list behavior
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
