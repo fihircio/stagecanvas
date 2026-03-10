@@ -15,7 +15,15 @@ from .config import (
     DRIFT_SUSTAINED_WARN_SAMPLES,
     DRIFT_WARN_MS,
 )
-from .models import ControlCommand, HeartbeatRequest, NodeStatus, RegisterNodeRequest
+from .models import (
+    ControlCommand,
+    HeartbeatRequest,
+    MediaAssetCreateRequest,
+    MediaAssetResponse,
+    MediaAssetUpdateRequest,
+    NodeStatus,
+    RegisterNodeRequest,
+)
 
 DriftLevel = Literal["OK", "WARN", "CRITICAL"]
 
@@ -313,3 +321,90 @@ class NodeRegistry:
             "progress_message": raw.get("progress_message"),
             "last_preload_request_id": raw.get("last_preload_request_id"),
         }
+
+
+@dataclass
+class MediaAssetRecord:
+    asset_id: str
+    label: str | None
+    codec_profile: str
+    duration_ms: int
+    size_bytes: int
+    checksum: str | None = None
+    uri: str | None = None
+    status: str = "REGISTERED"
+    error_message: str | None = None
+    created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
+    updated_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
+
+    def to_response(self) -> MediaAssetResponse:
+        return MediaAssetResponse(
+            asset_id=self.asset_id,
+            label=self.label,
+            codec_profile=self.codec_profile,
+            duration_ms=self.duration_ms,
+            size_bytes=self.size_bytes,
+            checksum=self.checksum,
+            uri=self.uri,
+            status=self.status,
+            error_message=self.error_message,
+            created_at_ms=self.created_at_ms,
+            updated_at_ms=self.updated_at_ms,
+        )
+
+
+class MediaRegistry:
+    def __init__(self) -> None:
+        self._assets: dict[str, MediaAssetRecord] = {}
+        self._lock = asyncio.Lock()
+
+    async def register(self, body: MediaAssetCreateRequest) -> tuple[MediaAssetRecord, bool, bool]:
+        async with self._lock:
+            existing = self._assets.get(body.asset_id)
+            if existing is not None:
+                idempotent = (
+                    existing.label == body.label
+                    and existing.codec_profile == body.codec_profile
+                    and existing.duration_ms == body.duration_ms
+                    and existing.size_bytes == body.size_bytes
+                    and existing.checksum == body.checksum
+                    and existing.uri == body.uri
+                )
+                return existing, False, idempotent
+
+            record = MediaAssetRecord(
+                asset_id=body.asset_id,
+                label=body.label,
+                codec_profile=body.codec_profile,
+                duration_ms=body.duration_ms,
+                size_bytes=body.size_bytes,
+                checksum=body.checksum,
+                uri=body.uri,
+                status=body.status,
+            )
+            self._assets[body.asset_id] = record
+            return record, True, True
+
+    async def list_assets(self) -> list[MediaAssetResponse]:
+        async with self._lock:
+            return [asset.to_response() for asset in self._assets.values()]
+
+    async def get(self, asset_id: str) -> MediaAssetRecord | None:
+        async with self._lock:
+            return self._assets.get(asset_id)
+
+    async def update(self, asset_id: str, body: MediaAssetUpdateRequest) -> MediaAssetRecord | None:
+        async with self._lock:
+            record = self._assets.get(asset_id)
+            if record is None:
+                return None
+            if body.status is not None:
+                record.status = body.status
+            if body.error_message is not None:
+                record.error_message = body.error_message
+            if body.checksum is not None:
+                record.checksum = body.checksum
+            if body.uri is not None:
+                record.uri = body.uri
+            record.updated_at_ms = int(time.time() * 1000)
+            return record

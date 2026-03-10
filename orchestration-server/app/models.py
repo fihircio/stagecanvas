@@ -2,13 +2,58 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .config import PROTOCOL_VERSION
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
 CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
 ProtocolVersion = Literal["v1"]
+MediaAssetStatus = Literal["REGISTERED", "INGESTING", "READY", "FAILED"]
+
+
+class MappingBlend(BaseModel):
+    gamma: float = Field(default=1.0, ge=0.0)
+    brightness: float = Field(default=1.0, ge=0.0)
+    black_level: float = Field(default=0.0, ge=0.0)
+
+
+class MappingMesh(BaseModel):
+    vertices: list[float] = Field(min_length=6)
+    uvs: list[float] = Field(min_length=6)
+    indices: list[int] = Field(min_length=3)
+
+    @classmethod
+    def _validate_pairs(cls, values: list[float], name: str) -> list[float]:
+        if len(values) % 2 != 0:
+            raise ValueError(f"{name} must contain an even number of floats")
+        return values
+
+    @classmethod
+    def _validate_tris(cls, values: list[int]) -> list[int]:
+        if len(values) % 3 != 0:
+            raise ValueError("indices must contain a multiple of 3 entries")
+        return values
+
+    @model_validator(mode="after")
+    def _validate_model(self) -> "MappingMesh":
+        self.vertices = self._validate_pairs(self.vertices, "vertices")
+        self.uvs = self._validate_pairs(self.uvs, "uvs")
+        if len(self.uvs) != len(self.vertices):
+            raise ValueError("uvs length must match vertices length")
+        self.indices = self._validate_tris(self.indices)
+        return self
+
+
+class MappingOutput(BaseModel):
+    output_id: str = Field(min_length=1)
+    mesh: MappingMesh
+    blend: MappingBlend = Field(default_factory=MappingBlend)
+
+
+class MappingConfig(BaseModel):
+    version: Literal["v1"] = "v1"
+    outputs: list[MappingOutput] = Field(min_length=1)
 
 
 class RegisterNodeRequest(BaseModel):
@@ -71,6 +116,13 @@ class PreloadShowRequest(BaseModel):
     request_id: str | None = None
 
 
+class AssetTransferRequest(BaseModel):
+    show_id: str = Field(min_length=1)
+    assets: list[PreloadAsset] = Field(default_factory=list)
+    node_ids: list[str] = Field(default_factory=list)
+    request_id: str | None = None
+
+
 class NodeCacheStatus(BaseModel):
     show_id: str | None = None
     preload_state: Literal["EMPTY", "LOADING", "READY", "FAILED", "IDLE", "PRELOADING", "ERROR"] = "EMPTY"
@@ -114,6 +166,45 @@ class TimelineShowSummary(BaseModel):
 
 class TimelineUpsertShowRequest(BaseModel):
     duration_ms: int = Field(gt=0)
+    mapping_config: MappingConfig | None = None
+
+
+class MediaAssetMetadata(BaseModel):
+    codec_profile: str = Field(min_length=1)
+    duration_ms: int = Field(ge=0)
+    size_bytes: int = Field(ge=0)
+
+
+class MediaAssetCreateRequest(BaseModel):
+    asset_id: str = Field(min_length=1)
+    label: str | None = None
+    codec_profile: str = Field(min_length=1)
+    duration_ms: int = Field(ge=0)
+    size_bytes: int = Field(ge=0)
+    checksum: str | None = None
+    uri: str | None = None
+    status: MediaAssetStatus = "REGISTERED"
+
+
+class MediaAssetUpdateRequest(BaseModel):
+    status: MediaAssetStatus | None = None
+    error_message: str | None = None
+    checksum: str | None = None
+    uri: str | None = None
+
+
+class MediaAssetResponse(BaseModel):
+    asset_id: str
+    label: str | None
+    codec_profile: str
+    duration_ms: int
+    size_bytes: int
+    checksum: str | None
+    uri: str | None
+    status: MediaAssetStatus
+    error_message: str | None
+    created_at_ms: int
+    updated_at_ms: int
 
 
 class TimelineUpsertTrackRequest(BaseModel):

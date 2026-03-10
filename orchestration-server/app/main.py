@@ -13,6 +13,10 @@ from .config import MIN_PLAY_AT_LEAD_MS, PROTOCOL_VERSION
 from .models import (
     ControlCommand,
     HeartbeatRequest,
+    MappingConfig,
+    MediaAssetCreateRequest,
+    MediaAssetUpdateRequest,
+    AssetTransferRequest,
     OperatorCommandRequest,
     PreloadShowRequest,
     RegisterNodeRequest,
@@ -24,11 +28,12 @@ from .models import (
     TimelineUpsertTrackRequest,
 )
 from .command_ledger import CommandLedger
-from .registry import NodeRegistry
+from .registry import MediaRegistry, NodeRegistry
 from .timeline_repository import TimelineRepository
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
+media_registry = MediaRegistry()
 timeline_repo = TimelineRepository(Path(__file__).resolve().parent.parent / "data" / "timeline.db")
 command_ledger = CommandLedger(Path(__file__).resolve().parent.parent / "data" / "orchestration.db")
 
@@ -75,6 +80,42 @@ async def node_drift_history(node_id: str) -> dict[str, object]:
     if record is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
     return {"node_id": node_id, "history": await registry.get_drift_history(node_id)}
+
+
+@app.post("/api/v1/media")
+async def register_media_asset(body: MediaAssetCreateRequest) -> dict[str, object]:
+    record, is_new, idempotent = await media_registry.register(body)
+    if not idempotent:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason_code": "ASSET_ID_MISMATCH",
+                "message": "Asset ID already exists with different metadata.",
+            },
+        )
+    return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "idempotent": not is_new}
+
+
+@app.get("/api/v1/media")
+async def list_media_assets() -> dict[str, object]:
+    assets = await media_registry.list_assets()
+    return {"assets": [asset.model_dump(mode="json") for asset in assets]}
+
+
+@app.get("/api/v1/media/{asset_id}")
+async def get_media_asset(asset_id: str) -> dict[str, object]:
+    record = await media_registry.get(asset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
+    return {"asset": record.to_response().model_dump(mode="json")}
+
+
+@app.patch("/api/v1/media/{asset_id}")
+async def update_media_asset(asset_id: str, body: MediaAssetUpdateRequest) -> dict[str, object]:
+    record = await media_registry.update(asset_id, body)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
+    return {"ok": True, "asset": record.to_response().model_dump(mode="json")}
 
 
 @app.get("/api/v1/slo")
@@ -347,6 +388,63 @@ async def preload_show(body: PreloadShowRequest) -> dict[str, object]:
     return response
 
 
+@app.post("/api/v1/assets/transfer")
+async def transfer_assets(body: AssetTransferRequest) -> dict[str, object]:
+    replay = _idempotent_begin_or_raise(
+        scope="asset_transfer",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
+    target_ids = body.node_ids or await registry.active_node_ids()
+    total_bytes = 0
+    for asset in body.assets:
+        total_bytes += max(0, int(asset.size_bytes))
+
+    per_node: list[dict[str, object]] = []
+    for node_id in target_ids:
+        record = await registry.get(node_id)
+        if record is None:
+            per_node.append({"node_id": node_id, "status": "missing"})
+            continue
+        record.cache = {
+            **record.cache,
+            "show_id": body.show_id,
+            "preload_state": "LOADING",
+            "asset_total": len(body.assets),
+            "cached_assets": 0,
+            "bytes_total": total_bytes,
+            "bytes_cached": 0,
+            "progress_assets_pct": 0.0,
+            "progress_bytes_pct": 0.0,
+            "progress_message": "transfer",
+            "last_preload_request_id": body.request_id,
+        }
+        per_node.append({"node_id": node_id, "status": "queued"})
+
+    transfer_commands = [
+        {
+            "media_id": asset.media_id,
+            "uri": asset.uri,
+            "checksum": asset.checksum,
+            "size_bytes": asset.size_bytes,
+        }
+        for asset in body.assets
+    ]
+    response = {
+        "ok": True,
+        "transfer_requested": True,
+        "show_id": body.show_id,
+        "asset_count": len(body.assets),
+        "transfer_commands": transfer_commands,
+        "per_node": per_node,
+    }
+    command_ledger.finalize_request("asset_transfer", body.request_id, response)
+    return response
+
+
 @app.post("/api/v1/operators/pause")
 async def operator_pause(body: OperatorCommandRequest) -> dict[str, object]:
     replay = _idempotent_begin_or_raise(
@@ -403,6 +501,7 @@ async def operator_load_show(body: OperatorCommandRequest) -> dict[str, object]:
     if replay is not None:
         return replay
 
+    _validate_mapping_config_from_payload(body.payload)
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="LOAD_SHOW",
@@ -522,3 +621,19 @@ def _idempotent_begin_or_raise(
             },
         )
     return None
+
+
+def _validate_mapping_config_from_payload(payload: dict[str, object]) -> None:
+    mapping_config = payload.get("mapping_config")
+    if mapping_config is None:
+        return
+    try:
+        MappingConfig.model_validate(mapping_config)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason_code": "INVALID_MAPPING_CONFIG",
+                "message": f"mapping_config validation failed: {exc}",
+            },
+        ) from exc

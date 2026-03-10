@@ -54,7 +54,13 @@
             "type": { "const": "COMMAND" },
             "command": { "enum": ["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"] },
             "target_time_ms": { "type": "integer", "minimum": 0 },
-            "payload": { "type": "object" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "mapping_config": { "$ref": "#/$defs/MappingConfig" }
+              },
+              "additionalProperties": true
+            },
             "seq": { "type": "integer", "minimum": 0 }
           },
           "required": ["type", "command", "seq"]
@@ -77,6 +83,45 @@
           "required": ["type", "show_id", "status", "position_ms", "drift_ms", "drift_level"]
         }
       ]
+    },
+    "MappingBlend": {
+      "type": "object",
+      "properties": {
+        "gamma": { "type": "number", "minimum": 0 },
+        "brightness": { "type": "number", "minimum": 0 },
+        "black_level": { "type": "number", "minimum": 0 }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "MappingMesh": {
+      "type": "object",
+      "properties": {
+        "vertices": { "type": "array", "items": { "type": "number" }, "minItems": 6 },
+        "uvs": { "type": "array", "items": { "type": "number" }, "minItems": 6 },
+        "indices": { "type": "array", "items": { "type": "integer" }, "minItems": 3 }
+      },
+      "required": ["vertices", "uvs", "indices"],
+      "additionalProperties": false
+    },
+    "MappingOutput": {
+      "type": "object",
+      "properties": {
+        "output_id": { "type": "string" },
+        "mesh": { "$ref": "#/$defs/MappingMesh" },
+        "blend": { "$ref": "#/$defs/MappingBlend" }
+      },
+      "required": ["output_id", "mesh"],
+      "additionalProperties": false
+    },
+    "MappingConfig": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string", "const": "v1" },
+        "outputs": { "type": "array", "items": { "$ref": "#/$defs/MappingOutput" }, "minItems": 1 }
+      },
+      "required": ["version", "outputs"],
+      "additionalProperties": false
     }
   }
 }

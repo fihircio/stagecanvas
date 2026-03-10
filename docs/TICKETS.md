@@ -909,14 +909,14 @@ Out of scope:
 - actual media upload/transfer implementation
 - UI ingestion workflow
 Acceptance:
-- [ ] media registry supports create/list/get/update status for assets
-- [ ] asset entries include codec profile, duration, and size metadata fields
-- [ ] tests cover idempotent asset registration by stable `asset_id`
+- [x] media registry supports create/list/get/update status for assets
+- [x] asset entries include codec profile, duration, and size metadata fields
+- [x] tests cover idempotent asset registration by stable `asset_id`
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-048 Node Asset Transfer Stub
 
@@ -934,15 +934,15 @@ Out of scope:
 - real file transfer implementation
 - protocol major-version changes
 Acceptance:
-- [ ] transfer command stub emitted per asset with progress callbacks simulated in tests
-- [ ] node cache state updates for transfer in-progress and completed states
-- [ ] orchestration surfaces transfer status in node snapshots
+- [x] transfer command stub emitted per asset with progress callbacks simulated in tests
+- [x] node cache state updates for transfer in-progress and completed states
+- [x] orchestration surfaces transfer status in node snapshots
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-049 Render Bridge Integration Path v1
 
@@ -958,15 +958,15 @@ Out of scope:
 - production Unity project integration
 - GPU pipeline implementation
 Acceptance:
-- [ ] bridge interface supports load/play/pause/seek/stop with error propagation
-- [ ] mock bridge test validates call order for `LOAD_SHOW` + `PLAY_AT`
-- [ ] integration test validates error path marks node `ERROR`
+- [x] bridge interface supports load/play/pause/seek/stop with error propagation
+- [x] mock bridge test validates call order for `LOAD_SHOW` + `PLAY_AT`
+- [x] integration test validates error path marks node `ERROR`
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
 - [ ] `make render-compile`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-050 Warp/Blend Pipeline Skeleton
 
@@ -982,15 +982,15 @@ Out of scope:
 - real shader/mesh processing
 - UI mapping editor
 Acceptance:
-- [ ] mapping config can be loaded per node and attached to state
-- [ ] render bridge receives mapping config on `LOAD_SHOW`
-- [ ] tests validate config propagation and error handling
+- [x] mapping config can be loaded per node and attached to state
+- [x] render bridge receives mapping config on `LOAD_SHOW`
+- [x] tests validate config propagation and error handling
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-051 Timeline Editor MVP
 
@@ -1006,14 +1006,14 @@ Out of scope:
 - complex snapping/drag reordering
 - audio/effects lane features
 Acceptance:
-- [ ] create/update/delete tracks and clips via existing orchestration endpoints
-- [ ] timeline list updates immediately after mutations
-- [ ] optimistic UI errors surfaced with actionable reason
+- [x] create/update/delete tracks and clips via existing orchestration endpoints
+- [x] timeline list updates immediately after mutations
+- [x] optimistic UI errors surfaced with actionable reason
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
-- [ ] `make sanity`
+- [x] `cd control-ui && npm run lint && npm run build`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-052 Mapping Config Model + Validation
 
@@ -1029,11 +1029,11 @@ Out of scope:
 - UI editor for mapping configuration
 - render-node shader implementation
 Acceptance:
-- [ ] mapping config schema supports per-output mesh + blend params
-- [ ] orchestration validates schema on show update/load
-- [ ] tests cover invalid/missing fields and version compatibility
+- [x] mapping config schema supports per-output mesh + blend params
+- [x] orchestration validates schema on show update/load
+- [x] tests cover invalid/missing fields and version compatibility
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 - [ ] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note

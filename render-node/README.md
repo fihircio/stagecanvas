@@ -16,6 +16,7 @@ Implemented commands:
 - `SEEK`
 - `STOP`
 - `PING`
+Note: `LOAD_SHOW` payload may include `mapping_config` for warp/blend wiring.
 
 ## Run One Node
 
@@ -36,6 +37,11 @@ Periodic diagnostics logs (useful while debugging reconnection/command handling)
 ```bash
 stagecanvas-render-node --node-id render-node-1 --label "Render Node 1" --log-state-every-sec 2
 ```
+
+Bridge integration path:
+
+- The renderer bridge interface lives in `app/bridge.py` and supports `load_show`, `play_at`, `pause`, `seek`, `stop`, and `ping`.
+- Bridge exceptions propagate back into the node state (status flips to `ERROR` and the command history records the failure).
 
 Bounded smoke run (auto-stop):
 
