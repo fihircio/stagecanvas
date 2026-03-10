@@ -7,7 +7,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import httpx
 import websockets
@@ -23,6 +23,30 @@ class WarnRateState:
     window_start_ms: int
     emitted: int = 0
     suppressed: int = 0
+
+
+@dataclass
+class TimeSyncClock:
+    source: Literal["system", "ntp", "ptp"] = "system"
+    offset_ms: float = 0.0
+
+    def drift_ms(self, system_now_ms: int) -> float:
+        return float(self.offset_ms)
+
+    def now_ms(self, system_now_ms: int | None = None) -> int:
+        base = system_now_ms if system_now_ms is not None else int(time.time() * 1000)
+        return int(base + self.offset_ms)
+
+    @classmethod
+    def from_source(cls, source: str, offset_ms: float | None = None) -> "TimeSyncClock":
+        normalized = source if source in {"system", "ntp", "ptp"} else "system"
+        if offset_ms is not None and offset_ms != 0.0:
+            return cls(source=normalized, offset_ms=float(offset_ms))
+        if normalized == "ntp":
+            return cls(source="ntp", offset_ms=3.5)
+        if normalized == "ptp":
+            return cls(source="ptp", offset_ms=1.0)
+        return cls(source="system", offset_ms=0.0)
 
 
 class RenderNodeAgent:
@@ -44,6 +68,8 @@ class RenderNodeAgent:
         diagnostics_sample_every: int = 1,
         warn_rate_window_sec: float = 30.0,
         warn_rate_burst: int = 3,
+        time_sync_source: Literal["system", "ntp", "ptp"] = "system",
+        time_sync_offset_ms: float = 0.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.node_id = node_id
@@ -62,6 +88,8 @@ class RenderNodeAgent:
         self.bridge = bridge or NullRendererBridge()
         self.decoder = decoder or NullDecoder()
         self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge, decoder=self.decoder)
+        self.time_sync_source = time_sync_source
+        self._time_sync_clock = TimeSyncClock.from_source(time_sync_source, time_sync_offset_ms)
         self._client = httpx.AsyncClient(timeout=5.0)
         self._stop_event = asyncio.Event()
         self._ws_connected = False
@@ -159,6 +187,11 @@ class RenderNodeAgent:
         endpoint = f"{self.base_url}/api/v1/nodes/{self.node_id}/heartbeat"
         while not self._stop_event.is_set():
             payload = await self.state.heartbeat_payload()
+            system_now_ms = int(time.time() * 1000)
+            drift_ms = self._time_sync_clock.drift_ms(system_now_ms)
+            payload["drift_ms"] = drift_ms
+            payload["time_sync_source"] = self.time_sync_source
+            payload["time_sync_offset_ms"] = drift_ms
             try:
                 resp = await self._client.post(endpoint, json=payload)
                 resp.raise_for_status()
@@ -396,6 +429,18 @@ async def main() -> None:
         default=3,
         help="Maximum warn emits per event key per window before suppression.",
     )
+    parser.add_argument(
+        "--time-sync-source",
+        choices=["system", "ntp", "ptp"],
+        default="system",
+        help="Select time sync source stub for drift reporting.",
+    )
+    parser.add_argument(
+        "--time-sync-offset-ms",
+        type=float,
+        default=0.0,
+        help="Override time sync offset (ms) for ntp/ptp stub.",
+    )
     args = parser.parse_args()
 
     bridge: RendererBridge
@@ -420,6 +465,8 @@ async def main() -> None:
         diagnostics_sample_every=args.diagnostics_sample_every,
         warn_rate_window_sec=args.warn_rate_window_sec,
         warn_rate_burst=args.warn_rate_burst,
+        time_sync_source=args.time_sync_source,
+        time_sync_offset_ms=args.time_sync_offset_ms,
     )
     try:
         await agent.run()

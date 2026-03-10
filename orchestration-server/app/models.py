@@ -9,6 +9,7 @@ from .config import PROTOCOL_VERSION
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
 CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
 ProtocolVersion = Literal["v1"]
+TimeSyncSource = Literal["system", "ntp", "ptp"]
 MediaAssetStatus = Literal["REGISTERED", "INGESTING", "READY", "FAILED"]
 TranscodeJobStatus = Literal["QUEUED", "RUNNING", "DONE", "FAILED"]
 SUPPORTED_CODEC_PROFILES: dict[str, str] = {
@@ -83,6 +84,8 @@ class HeartbeatRequest(BaseModel):
     metrics: NodeMetrics
     position_ms: int = Field(default=0, ge=0)
     drift_ms: float = 0.0
+    time_sync_source: TimeSyncSource = "system"
+    time_sync_offset_ms: float = 0.0
     show_id: str | None = None
     cache: "NodeCacheStatus | None" = None
 
@@ -255,6 +258,36 @@ class TranscodeJobResponse(BaseModel):
     error_message: str | None
     created_at_ms: int
     updated_at_ms: int
+
+
+class TriggerRule(BaseModel):
+    rule_id: str = Field(min_length=1)
+    name: str | None = None
+    source: Literal["osc", "http"] = "osc"
+    cue_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TriggerRegisterRequest(BaseModel):
+    rule_id: str = Field(min_length=1)
+    name: str | None = None
+    source: Literal["osc", "http"] = "osc"
+    cue_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TriggerFireRequest(BaseModel):
+    rule_id: str = Field(min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TriggerEvent(BaseModel):
+    event_id: str
+    rule_id: str
+    source: Literal["osc", "http"] = "osc"
+    cue_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    timestamp_ms: int = Field(ge=0)
 
 
 class TimelineUpsertTrackRequest(BaseModel):

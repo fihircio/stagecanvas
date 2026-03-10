@@ -45,6 +45,8 @@ class NodeRecord:
     drift_ms: float = 0.0
     drift_level: DriftLevel = "OK"
     drift_alert_level: DriftLevel = "OK"
+    time_sync_source: str = "system"
+    time_sync_offset_ms: float = 0.0
     metrics: dict[str, Any] = field(
         default_factory=lambda: {
             "cpu_pct": 0.0,
@@ -114,13 +116,19 @@ class NodeRegistry:
             record.protocol_version = hb.version
             record.metrics = hb.metrics.model_dump()
             record.position_ms = hb.position_ms
-            record.drift_ms = hb.drift_ms
+            record.time_sync_source = hb.time_sync_source
+            record.time_sync_offset_ms = hb.time_sync_offset_ms
+            if hb.time_sync_source == "system":
+                record.drift_ms = hb.drift_ms
+            else:
+                record.drift_ms = hb.time_sync_offset_ms
             record.drift_level = self.classify_drift_level(record.drift_ms)
             record.drift_history.append(
                 {
                     "timestamp_ms": int(time.time() * 1000),
                     "drift_ms": record.drift_ms,
                     "drift_level": record.drift_level,
+                    "time_sync_source": record.time_sync_source,
                 }
             )
             if record.drift_level == "CRITICAL":
@@ -298,6 +306,8 @@ class NodeRegistry:
             "drift_level": drift_level,
             "drift_alert_level": record.drift_alert_level,
             "drift_alert_active": record.drift_alert_level != "OK",
+            "time_sync_source": record.time_sync_source,
+            "time_sync_offset_ms": record.time_sync_offset_ms,
             "metrics": record.metrics,
             "last_seen_ms": record.last_seen_ms,
             "capabilities": record.capabilities,

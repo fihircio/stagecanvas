@@ -28,6 +28,10 @@ from .models import (
     PreloadShowRequest,
     RegisterNodeRequest,
     SchedulePlayAtRequest,
+    TriggerEvent,
+    TriggerFireRequest,
+    TriggerRegisterRequest,
+    TriggerRule,
     TimelineShowSummary,
     TimelineSnapshotResponse,
     TimelineUpsertClipRequest,
@@ -52,6 +56,9 @@ transfer_worker = AssetTransferWorker(
 )
 timeline_repo = TimelineRepository(Path(__file__).resolve().parent.parent / "data" / "timeline.db")
 command_ledger = CommandLedger(Path(__file__).resolve().parent.parent / "data" / "orchestration.db")
+trigger_rules: dict[str, TriggerRule] = {}
+trigger_events: list[TriggerEvent] = []
+TRIGGER_EVENT_LIMIT = 200
 preview_image_last_request: dict[str, int] = {}
 
 app.add_middleware(
@@ -301,6 +308,51 @@ async def upload_media_asset(request: Request) -> dict[str, object]:
             },
         )
     return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "idempotent": not is_new}
+
+
+@app.post("/api/v1/triggers/register")
+async def register_trigger_rule(body: TriggerRegisterRequest) -> dict[str, object]:
+    rule = TriggerRule(
+        rule_id=body.rule_id,
+        name=body.name,
+        source=body.source,
+        cue_id=body.cue_id,
+        payload=body.payload,
+    )
+    trigger_rules[rule.rule_id] = rule
+    return {"ok": True, "rule": rule.model_dump(mode="json")}
+
+
+@app.get("/api/v1/triggers/rules")
+async def list_trigger_rules() -> dict[str, object]:
+    return {"rules": [rule.model_dump(mode="json") for rule in trigger_rules.values()]}
+
+
+@app.post("/api/v1/triggers/fire")
+async def fire_trigger(body: TriggerFireRequest) -> dict[str, object]:
+    rule = trigger_rules.get(body.rule_id)
+    if rule is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"reason_code": "TRIGGER_RULE_NOT_FOUND", "message": f"Rule not found: {body.rule_id}"},
+        )
+    event = TriggerEvent(
+        event_id=f"evt-{body.rule_id}-{int(time.time() * 1000)}",
+        rule_id=rule.rule_id,
+        source=rule.source,
+        cue_id=rule.cue_id,
+        payload={**rule.payload, **body.payload},
+        timestamp_ms=int(time.time() * 1000),
+    )
+    trigger_events.append(event)
+    if len(trigger_events) > TRIGGER_EVENT_LIMIT:
+        del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
+    return {"ok": True, "event": event.model_dump(mode="json")}
+
+
+@app.get("/api/v1/triggers/events")
+async def list_trigger_events() -> dict[str, object]:
+    return {"events": [event.model_dump(mode="json") for event in trigger_events]}
 
 
 @app.get("/api/v1/slo")

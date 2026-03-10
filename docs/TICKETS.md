@@ -1483,15 +1483,15 @@ Out of scope:
 - actual PTP integration
 - kernel time discipline
 Acceptance:
-- [ ] time sync source can be selected (system/ntp/ptp stub)
-- [ ] drift computation uses the abstraction
-- [ ] tests validate selection and default behavior
+ [x] time sync source can be selected (system/ntp/ptp stub)
+ [x] drift computation uses the abstraction
+ [x] tests validate selection and default behavior
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
 
 ## SC-072 OSC/HTTP Trigger Stub
 
@@ -1507,11 +1507,11 @@ Out of scope:
 - full trigger routing system
 - security hardening
 Acceptance:
-- [ ] add endpoints to register trigger rules and simulate trigger events
-- [ ] events are recorded in an in-memory log
-- [ ] tests validate register + fire + list behavior
+ [x] add endpoints to register trigger rules and simulate trigger events
+ [x] events are recorded in an in-memory log
+ [x] tests validate register + fire + list behavior
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+ [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+ [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+ [x] branch + handoff note
