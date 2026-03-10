@@ -13,6 +13,7 @@ from .config import MIN_PLAY_AT_LEAD_MS, PROTOCOL_VERSION
 from .models import (
     ControlCommand,
     HeartbeatRequest,
+    PreviewSnapshotRequest,
     MappingConfig,
     MediaAssetCreateRequest,
     MediaAssetUpdateRequest,
@@ -28,12 +29,13 @@ from .models import (
     TimelineUpsertTrackRequest,
 )
 from .command_ledger import CommandLedger
-from .registry import MediaRegistry, NodeRegistry
+from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask
 from .timeline_repository import TimelineRepository
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
-media_registry = MediaRegistry()
+media_registry = MediaRegistry(Path(__file__).resolve().parent.parent / "data" / "media_registry.json")
+transfer_worker = AssetTransferWorker(registry)
 timeline_repo = TimelineRepository(Path(__file__).resolve().parent.parent / "data" / "timeline.db")
 command_ledger = CommandLedger(Path(__file__).resolve().parent.parent / "data" / "orchestration.db")
 
@@ -43,6 +45,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def _transfer_loop() -> None:
+    while True:
+        ran = await transfer_worker.run_once()
+        await asyncio.sleep(0.05 if ran else 0.2)
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    app.state.transfer_task = asyncio.create_task(_transfer_loop())
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    task = getattr(app.state, "transfer_task", None)
+    if task is not None:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 @app.get("/health")
@@ -80,6 +102,38 @@ async def node_drift_history(node_id: str) -> dict[str, object]:
     if record is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
     return {"node_id": node_id, "history": await registry.get_drift_history(node_id)}
+
+
+@app.post("/api/v1/preview/snapshot")
+async def preview_snapshot(body: PreviewSnapshotRequest) -> dict[str, object]:
+    target_ids = body.node_ids or await registry.active_node_ids()
+    nodes = await registry.list_nodes()
+    node_by_id = {node["node_id"]: node for node in nodes}
+    now_ms = int(time.time() * 1000)
+    snapshots: list[dict[str, object]] = []
+    for node_id in target_ids:
+        node = node_by_id.get(node_id)
+        if node is None:
+            snapshots.append(
+                {
+                    "node_id": node_id,
+                    "ok": False,
+                    "reason_code": "NOT_REGISTERED",
+                    "timestamp_ms": now_ms,
+                }
+            )
+            continue
+        snapshots.append(
+            {
+                "node_id": node_id,
+                "ok": True,
+                "status": node.get("status"),
+                "show_id": node.get("show_id"),
+                "position_ms": node.get("position_ms"),
+                "timestamp_ms": now_ms,
+            }
+        )
+    return {"ok": True, "requested_count": len(target_ids), "snapshots": snapshots}
 
 
 @app.post("/api/v1/media")
@@ -146,7 +200,11 @@ async def timeline_list_shows() -> list[TimelineShowSummary]:
 
 @app.put("/api/v1/timeline/shows/{show_id}")
 async def timeline_upsert_show(show_id: str, body: TimelineUpsertShowRequest) -> dict[str, object]:
-    timeline_repo.upsert_show(show_id=show_id, duration_ms=body.duration_ms)
+    mapping_payload = None
+    if body.mapping_config is not None:
+        mapping_payload = body.mapping_config.model_dump(mode="json")
+        _validate_mapping_config_from_payload({"mapping_config": mapping_payload})
+    timeline_repo.upsert_show(show_id=show_id, duration_ms=body.duration_ms, mapping_config=mapping_payload)
     return {"ok": True, "show_id": show_id}
 
 
@@ -162,12 +220,13 @@ async def timeline_delete_show(show_id: str) -> dict[str, object]:
 @app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}")
 async def timeline_upsert_track(show_id: str, track_id: str, body: TimelineUpsertTrackRequest) -> dict[str, object]:
     try:
+        position = body.order if body.order is not None else body.position
         timeline_repo.upsert_track(
             show_id=show_id,
             track_id=track_id,
             label=body.label,
             kind=body.kind,
-            position=body.position,
+            position=position,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -191,6 +250,7 @@ async def timeline_upsert_clip(
     body: TimelineUpsertClipRequest,
 ) -> dict[str, object]:
     try:
+        position = body.order if body.order is not None else body.position
         timeline_repo.upsert_clip(
             show_id=show_id,
             track_id=track_id,
@@ -199,7 +259,7 @@ async def timeline_upsert_clip(
             start_ms=body.start_ms,
             duration_ms=body.duration_ms,
             kind=body.kind,
-            position=body.position,
+            position=position,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -424,6 +484,17 @@ async def transfer_assets(body: AssetTransferRequest) -> dict[str, object]:
         }
         per_node.append({"node_id": node_id, "status": "queued"})
 
+        for asset in body.assets:
+            transfer_worker.enqueue(
+                TransferTask(
+                    node_id=node_id,
+                    show_id=body.show_id,
+                    media_id=asset.media_id,
+                    size_bytes=int(asset.size_bytes),
+                )
+            )
+        await registry.update_transfer_queue_depth(node_id, transfer_worker.pending_count())
+
     transfer_commands = [
         {
             "media_id": asset.media_id,
@@ -501,11 +572,21 @@ async def operator_load_show(body: OperatorCommandRequest) -> dict[str, object]:
     if replay is not None:
         return replay
 
-    _validate_mapping_config_from_payload(body.payload)
+    payload = dict(body.payload)
+    mapping_config = payload.get("mapping_config")
+    show_id = payload.get("show_id")
+    if mapping_config is None and show_id is not None:
+        try:
+            mapping_config = timeline_repo.get_mapping_config(str(show_id))
+        except KeyError:
+            mapping_config = None
+        if mapping_config is not None:
+            payload["mapping_config"] = mapping_config
+    _validate_mapping_config_from_payload(payload)
     command = ControlCommand(
         version=PROTOCOL_VERSION,
         command="LOAD_SHOW",
-        payload=body.payload,
+        payload=payload,
         seq=command_ledger.next_seq(),
         origin="operator",
     )

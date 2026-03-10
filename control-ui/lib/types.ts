@@ -70,3 +70,19 @@ export type TimelineSnapshot = {
   playhead_ms: number;
   tracks: TimelineTrack[];
 };
+
+export type PreviewSnapshotEntry = {
+  node_id: string;
+  ok: boolean;
+  timestamp_ms: number;
+  reason_code?: string;
+  status?: string;
+  show_id?: string | null;
+  position_ms?: number;
+};
+
+export type PreviewSnapshotResponse = {
+  ok: boolean;
+  requested_count: number;
+  snapshots: PreviewSnapshotEntry[];
+};

@@ -156,6 +156,7 @@ class TimelineSnapshotResponse(BaseModel):
     duration_ms: int = Field(gt=0)
     playhead_ms: int = Field(ge=0)
     tracks: list[TimelineTrack] = Field(default_factory=list)
+    mapping_config: MappingConfig | None = None
 
 
 class TimelineShowSummary(BaseModel):
@@ -211,6 +212,7 @@ class TimelineUpsertTrackRequest(BaseModel):
     label: str = Field(min_length=1)
     kind: Literal["video", "audio", "image", "alpha", "trigger"] = "video"
     position: int | None = Field(default=None, ge=0)
+    order: int | None = Field(default=None, ge=0)
 
 
 class TimelineUpsertClipRequest(BaseModel):
@@ -219,3 +221,9 @@ class TimelineUpsertClipRequest(BaseModel):
     duration_ms: int = Field(gt=0)
     kind: Literal["video", "audio", "image", "alpha", "trigger"] = "video"
     position: int | None = Field(default=None, ge=0)
+    order: int | None = Field(default=None, ge=0)
+
+
+class PreviewSnapshotRequest(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
+    show_id: str | None = None

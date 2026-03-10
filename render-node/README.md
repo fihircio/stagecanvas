@@ -101,4 +101,6 @@ make render-smoke
 - Log stream policy: info logs go to stdout; warn/error logs go to stderr.
 - Repeated warning events are rate-limited with summary lines to reduce log flooding.
 - `LOAD_SHOW` with `preload_only=true` updates node cache contract fields in heartbeat/diagnostics for orchestration monitoring.
+- Playback stub emits frame counts during `PLAYING` and resets on `STOP`.
 - `make render-smoke` runs a bounded end-to-end node session against local orchestration and validates diagnostics output.
+- Cache index stub tracks assets with LRU eviction (`app/state.py`).

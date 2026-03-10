@@ -133,6 +133,13 @@ body {
   gap: 8px;
 }
 
+.timeline-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .timeline-playhead {
   position: absolute;
   top: 0;
@@ -153,6 +160,14 @@ body {
   font-size: 12px;
   font-weight: 700;
   color: #4b5563;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drag-handle {
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 .track-canvas {
@@ -171,6 +186,7 @@ body {
   display: flex;
   align-items: center;
   overflow: hidden;
+  cursor: grab;
 }
 
 .clip span {
@@ -234,6 +250,14 @@ body {
   padding: 10px;
 }
 
+.preview-controls {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .preview-grid-overlay {
   border: 1px solid #98a5b5;
   min-height: 100%;
@@ -258,6 +282,38 @@ body {
   margin-top: 10px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
+}
+
+.mapping-panel {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.mapping-textarea {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px;
+  font-family: "IBM Plex Mono", "Fira Code", monospace;
+  font-size: 12px;
+  min-height: 180px;
+  resize: vertical;
+}
+
+.mapping-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mapping-error {
+  color: #991b1b;
+  font-weight: 700;
+  font-size: 12px;
 }
 
 .status-stack {

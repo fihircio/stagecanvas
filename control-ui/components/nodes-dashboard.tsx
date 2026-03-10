@@ -23,6 +23,22 @@ type CommandResult = {
   requestId: string;
 };
 
+type PreviewSnapshotEntry = {
+  node_id: string;
+  ok: boolean;
+  timestamp_ms: number;
+  reason_code?: string;
+  status?: string;
+  show_id?: string | null;
+  position_ms?: number;
+};
+
+type PreviewSnapshotResponse = {
+  ok: boolean;
+  requested_count: number;
+  snapshots: PreviewSnapshotEntry[];
+};
+
 function statusClass(status: string): string {
   return `status-pill status-${status.toLowerCase()}`;
 }
@@ -54,6 +70,16 @@ export function NodesDashboard() {
   const [serverDriftSlo, setServerDriftSlo] = useState<DriftSloSnapshot | null>(null);
   const [previewTab, setPreviewTab] = useState("combined");
   const [timelineSnapshot, setTimelineSnapshot] = useState<TimelineSnapshot | null>(null);
+  const [previewSnapshots, setPreviewSnapshots] = useState<Record<string, PreviewSnapshotEntry>>({});
+  const [previewStatus, setPreviewStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [dragTrackId, setDragTrackId] = useState<string | null>(null);
+  const [dragClipId, setDragClipId] = useState<string | null>(null);
+  const [dragClipTrackId, setDragClipTrackId] = useState<string | null>(null);
+  const [mappingJson, setMappingJson] = useState("");
+  const [mappingStatus, setMappingStatus] = useState<"idle" | "saving" | "ok" | "error">("idle");
+  const [mappingError, setMappingError] = useState<string | null>(null);
   const [trackId, setTrackId] = useState("track-1");
   const [trackLabel, setTrackLabel] = useState("Track 1");
   const [trackKind, setTrackKind] = useState("video");
@@ -162,6 +188,8 @@ export function NodesDashboard() {
   );
   const activePreviewNode =
     previewTab === "combined" ? null : nodes.find((n) => n.node_id === previewTab) ?? null;
+  const activePreviewSnapshot = activePreviewNode ? previewSnapshots[activePreviewNode.node_id] : null;
+  const latestPreviewSnapshot = Object.values(previewSnapshots).sort((a, b) => b.timestamp_ms - a.timestamp_ms)[0];
   const reliabilityTotals = nodes.reduce(
     (acc, node) => {
       acc.replays += node.replay_count ?? 0;
@@ -179,6 +207,41 @@ export function NodesDashboard() {
   const timelinePlayheadMs = timelineSnapshot?.playhead_ms ?? globalPositionMs;
   const timelineTracks = timelineSnapshot?.tracks ?? [];
   const timelineMarks = [0, 0.25, 0.5, 0.75, 1];
+  const snapIntervalMs = 1000;
+
+  const sampleMappingJson = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          version: "v1",
+          outputs: [
+            {
+              output_id: "output-1",
+              mesh: {
+                vertices: [0, 0, 1, 0, 1, 1],
+                uvs: [0, 0, 1, 0, 1, 1],
+                indices: [0, 1, 2],
+              },
+              blend: { gamma: 1.0, brightness: 1.0, black_level: 0.0 },
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    [],
+  );
+
+  const applySnap = (value: number) => {
+    if (!snapEnabled) return value;
+    return Math.round(value / snapIntervalMs) * snapIntervalMs;
+  };
+
+  useEffect(() => {
+    if (!mappingJson) {
+      setMappingJson(sampleMappingJson);
+    }
+  }, [mappingJson, sampleMappingJson]);
 
   const onPlayAt = async () => {
     const now = Date.now();
@@ -285,6 +348,154 @@ export function NodesDashboard() {
       "DELETE",
     );
     await loadTimeline();
+  };
+
+  const onPreviewSnapshot = async () => {
+    setPreviewStatus("loading");
+    setPreviewError(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/preview/snapshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node_ids: targetNodeIds(), show_id: showId }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as PreviewSnapshotResponse;
+      if (!res.ok) {
+        const detail = (payload as unknown as Record<string, unknown>).detail as Record<string, unknown> | undefined;
+        const reason = detail?.reason_code ?? "UNKNOWN_ERROR";
+        throw new Error(`HTTP ${res.status}: ${reason}`);
+      }
+      const next: Record<string, PreviewSnapshotEntry> = {};
+      payload.snapshots.forEach((snap) => {
+        next[snap.node_id] = snap;
+      });
+      setPreviewSnapshots(next);
+      setPreviewStatus("idle");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Preview request failed";
+      setPreviewError(message);
+      setPreviewStatus("error");
+    }
+  };
+
+  const onLoadMappingSample = () => {
+    setMappingJson(sampleMappingJson);
+    setMappingError(null);
+    setMappingStatus("idle");
+  };
+
+  const onSaveMapping = async () => {
+    setMappingStatus("saving");
+    setMappingError(null);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(mappingJson) as Record<string, unknown>;
+    } catch (error) {
+      setMappingStatus("error");
+      setMappingError(error instanceof Error ? error.message : "Invalid JSON");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/timeline/shows/${encodeURIComponent(showId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duration_ms: timelineDurationMs, mapping_config: parsed }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        const detail = (payload.detail ?? payload) as Record<string, unknown>;
+        const reason = typeof detail.reason_code === "string" ? detail.reason_code : "UNKNOWN_ERROR";
+        const message = typeof detail.message === "string" ? detail.message : JSON.stringify(detail).slice(0, 160);
+        throw new Error(`HTTP ${res.status}: ${reason} - ${message}`);
+      }
+      setMappingStatus("ok");
+      setTimeout(() => setMappingStatus("idle"), 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Mapping save failed";
+      setMappingStatus("error");
+      setMappingError(message);
+    }
+  };
+
+  const reorderTracks = async (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const tracks = [...timelineTracks];
+    const fromIndex = tracks.findIndex((track) => track.track_id === fromId);
+    const toIndex = tracks.findIndex((track) => track.track_id === toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const [moved] = tracks.splice(fromIndex, 1);
+    tracks.splice(toIndex, 0, moved);
+    for (let index = 0; index < tracks.length; index += 1) {
+      const track = tracks[index];
+      await postJson(
+        `/api/v1/timeline/shows/${encodeURIComponent(showId)}/tracks/${encodeURIComponent(track.track_id)}`,
+        {
+          label: track.label,
+          kind: track.kind,
+          order: index,
+        },
+        "REORDER_TRACK",
+        "PUT",
+      );
+    }
+    await loadTimeline();
+  };
+
+  const reorderClips = async (trackId: string, fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const track = timelineTracks.find((t) => t.track_id === trackId);
+    if (!track) return;
+    const clips = [...track.clips];
+    const fromIndex = clips.findIndex((clip) => clip.clip_id === fromId);
+    const toIndex = clips.findIndex((clip) => clip.clip_id === toId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const [moved] = clips.splice(fromIndex, 1);
+    clips.splice(toIndex, 0, moved);
+    for (let index = 0; index < clips.length; index += 1) {
+      const clip = clips[index];
+      const startMs = clip.clip_id === moved.clip_id ? applySnap(clip.start_ms) : clip.start_ms;
+      await postJson(
+        `/api/v1/timeline/shows/${encodeURIComponent(showId)}/tracks/${encodeURIComponent(trackId)}/clips/${encodeURIComponent(clip.clip_id)}`,
+        {
+          label: clip.label,
+          start_ms: startMs,
+          duration_ms: clip.duration_ms,
+          kind: clip.kind,
+          order: index,
+        },
+        "REORDER_CLIP",
+        "PUT",
+      );
+    }
+    await loadTimeline();
+  };
+
+  const onTrackDragStart = (trackId: string) => {
+    setDragTrackId(trackId);
+  };
+
+  const onTrackDrop = async (trackId: string) => {
+    if (!dragTrackId) return;
+    await reorderTracks(dragTrackId, trackId);
+    setDragTrackId(null);
+  };
+
+  const onClipDragStart = (trackId: string, clipId: string) => {
+    setDragClipTrackId(trackId);
+    setDragClipId(clipId);
+  };
+
+  const onClipDrop = async (trackId: string, clipId: string) => {
+    if (!dragClipId || !dragClipTrackId) return;
+    if (dragClipTrackId !== trackId) {
+      setDragClipId(null);
+      setDragClipTrackId(null);
+      return;
+    }
+    await reorderClips(trackId, dragClipId, clipId);
+    setDragClipId(null);
+    setDragClipTrackId(null);
   };
 
   useEffect(() => {
@@ -414,17 +625,35 @@ export function NodesDashboard() {
         <div className="timeline-tracks">
           <div className="timeline-search">
             <input className="input compact" placeholder="Search cue..." />
+            <button
+              className={`chip snap-toggle ${snapEnabled ? "active" : ""}`}
+              onClick={() => setSnapEnabled((prev) => !prev)}
+            >
+              Snap {snapEnabled ? "On" : "Off"}
+            </button>
           </div>
           <div className="timeline-lanes">
             <div className="timeline-playhead" style={{ left: `${(timelinePlayheadMs / timelineDurationMs) * 100}%` }} />
             {timelineTracks.map((track) => (
-              <div className="timeline-lane" key={track.track_id}>
-                <div className="track-label">{track.label}</div>
+              <div
+                className="timeline-lane"
+                key={track.track_id}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => onTrackDrop(track.track_id)}
+              >
+                <div className="track-label" draggable onDragStart={() => onTrackDragStart(track.track_id)}>
+                  <span className="drag-handle">↕</span>
+                  {track.label}
+                </div>
                 <div className="track-canvas">
                   {track.clips.map((clip) => (
                     <div
                       className={`clip ${clip.kind === "alpha" ? "alpha" : ""}`}
                       key={clip.clip_id}
+                      draggable
+                      onDragStart={() => onClipDragStart(track.track_id, clip.clip_id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={() => onClipDrop(track.track_id, clip.clip_id)}
                       style={{
                         left: `${(clip.start_ms / timelineDurationMs) * 100}%`,
                         width: `${(clip.duration_ms / timelineDurationMs) * 100}%`,
@@ -490,6 +719,27 @@ export function NodesDashboard() {
             </div>
           </div>
         </div>
+        <div className="mapping-panel">
+          <div className="editor-title">Mapping Config</div>
+          <textarea
+            className="mapping-textarea"
+            value={mappingJson}
+            onChange={(event) => setMappingJson(event.target.value)}
+            rows={10}
+          />
+          <div className="mapping-actions">
+            <button className="btn subtle" onClick={onLoadMappingSample}>
+              Load Sample
+            </button>
+            <button className="btn" onClick={onSaveMapping}>
+              Save Mapping
+            </button>
+            <span className="muted">
+              {mappingStatus === "saving" ? "Saving..." : mappingStatus === "ok" ? "Saved" : mappingStatus === "error" ? "Error" : "Idle"}
+            </span>
+          </div>
+          {mappingError ? <div className="mapping-error">{mappingError}</div> : null}
+        </div>
       </section>
 
       <section className="workspace-grid">
@@ -535,7 +785,20 @@ export function NodesDashboard() {
               <span className="muted">
                 {previewTab === "combined" ? "Combined" : activePreviewNode?.label || "Node"}
               </span>
+              <span className="muted">
+                {activePreviewSnapshot
+                  ? `Preview @ ${new Date(activePreviewSnapshot.timestamp_ms).toLocaleTimeString()}`
+                  : latestPreviewSnapshot
+                    ? `Last preview @ ${new Date(latestPreviewSnapshot.timestamp_ms).toLocaleTimeString()}`
+                    : "No preview snapshot yet"}
+              </span>
             </div>
+          </div>
+          <div className="preview-controls">
+            <button className="btn subtle" onClick={onPreviewSnapshot} disabled={previewStatus === "loading"}>
+              {previewStatus === "loading" ? "Previewing..." : "Preview Snapshot"}
+            </button>
+            {previewError ? <span className="mapping-error">{previewError}</span> : null}
           </div>
 
           <div className="operator-row">

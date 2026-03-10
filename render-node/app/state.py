@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -10,6 +10,64 @@ from .bridge import NullRendererBridge, RendererBridge
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
 CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
+
+
+@dataclass
+class CacheAssetEntry:
+    asset_id: str
+    size_bytes: int
+    last_access_ms: int
+
+
+@dataclass
+class CacheIndex:
+    max_bytes: int = 500_000_000
+    _entries: OrderedDict[str, CacheAssetEntry] = field(default_factory=OrderedDict)
+    _current_bytes: int = 0
+
+    @property
+    def current_bytes(self) -> int:
+        return self._current_bytes
+
+    def list_assets(self) -> list[CacheAssetEntry]:
+        return list(self._entries.values())
+
+    def touch(self, asset_id: str, now_ms: int) -> bool:
+        entry = self._entries.get(asset_id)
+        if entry is None:
+            return False
+        entry.last_access_ms = now_ms
+        self._entries.move_to_end(asset_id)
+        return True
+
+    def add(self, asset_id: str, size_bytes: int, now_ms: int) -> list[CacheAssetEntry]:
+        size_bytes = max(0, int(size_bytes))
+        entry = self._entries.get(asset_id)
+        if entry is None:
+            entry = CacheAssetEntry(asset_id=asset_id, size_bytes=size_bytes, last_access_ms=now_ms)
+            self._entries[asset_id] = entry
+            self._current_bytes += size_bytes
+        else:
+            self._current_bytes -= entry.size_bytes
+            entry.size_bytes = size_bytes
+            entry.last_access_ms = now_ms
+            self._current_bytes += size_bytes
+            self._entries.move_to_end(asset_id)
+        return self._evict_if_needed()
+
+    def remove(self, asset_id: str) -> CacheAssetEntry | None:
+        entry = self._entries.pop(asset_id, None)
+        if entry is not None:
+            self._current_bytes -= entry.size_bytes
+        return entry
+
+    def _evict_if_needed(self) -> list[CacheAssetEntry]:
+        evicted: list[CacheAssetEntry] = []
+        while self._current_bytes > self.max_bytes and self._entries:
+            _, entry = self._entries.popitem(last=False)
+            self._current_bytes -= entry.size_bytes
+            evicted.append(entry)
+        return evicted
 
 
 @dataclass
@@ -36,7 +94,12 @@ class NodeState:
     cache_progress_bytes_pct: float = 0.0
     cache_progress_message: str | None = None
     cache_last_preload_request_id: str | None = None
+    cache_index: CacheIndex = field(default_factory=CacheIndex)
     mapping_config: dict[str, Any] | None = None
+    playback_frame_interval_ms: int = 33
+    playback_accumulator_ms: int = 0
+    playback_frames_emitted: int = 0
+    playback_started_ms: int | None = None
     bridge: RendererBridge = field(default_factory=NullRendererBridge)
     command_history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=50))
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -128,6 +191,9 @@ class NodeState:
                     self.status = "READY"
                     self.position_ms = 0
                     self.scheduled_play_time_ms = None
+                    self.playback_frames_emitted = 0
+                    self.playback_accumulator_ms = 0
+                    self.playback_started_ms = None
             elif command == "PLAY_AT":
                 self.show_id = str(payload.get("show_id", self.show_id or "demo-show"))
                 if target_time_ms is not None:
@@ -142,6 +208,7 @@ class NodeState:
             elif command == "PAUSE":
                 self.status = "PAUSED"
                 self.scheduled_play_time_ms = None
+                self.playback_started_ms = None
                 bridge_call = ("pause", {})
             elif command == "SEEK":
                 self.position_ms = int(payload.get("position_ms", self.position_ms))
@@ -150,6 +217,9 @@ class NodeState:
                 self.status = "READY"
                 self.position_ms = 0
                 self.scheduled_play_time_ms = None
+                self.playback_frames_emitted = 0
+                self.playback_accumulator_ms = 0
+                self.playback_started_ms = None
                 bridge_call = ("stop", {})
             elif command == "PING":
                 bridge_call = ("ping", {})
@@ -197,6 +267,12 @@ class NodeState:
                 self.cpu_pct = min(65.0, self.cpu_pct + 0.8)
                 self.gpu_pct = min(88.0, self.gpu_pct + 0.9)
                 self.drift_ms = ((now % 7) - 3) * 0.4
+                if self.playback_started_ms is None:
+                    self.playback_started_ms = now
+                self.playback_accumulator_ms += dt_ms
+                while self.playback_accumulator_ms >= self.playback_frame_interval_ms:
+                    self.playback_frames_emitted += 1
+                    self.playback_accumulator_ms -= self.playback_frame_interval_ms
             elif self.status == "PAUSED":
                 self.fps = 0.0
                 self.cpu_pct = max(14.0, self.cpu_pct - 0.5)
@@ -235,14 +311,14 @@ class NodeState:
                     "show_id": self.cache_show_id,
                     "preload_state": self.cache_preload_state,
                     "asset_total": self.cache_asset_total,
-                "cached_assets": self.cache_cached_assets,
-                "bytes_total": self.cache_bytes_total,
-                "bytes_cached": self.cache_bytes_cached,
-                "progress_assets_pct": self.cache_progress_assets_pct,
-                "progress_bytes_pct": self.cache_progress_bytes_pct,
-                "progress_message": self.cache_progress_message,
-                "last_preload_request_id": self.cache_last_preload_request_id,
-            },
+                    "cached_assets": self.cache_cached_assets,
+                    "bytes_total": self.cache_bytes_total,
+                    "bytes_cached": self.cache_bytes_cached,
+                    "progress_assets_pct": self.cache_progress_assets_pct,
+                    "progress_bytes_pct": self.cache_progress_bytes_pct,
+                    "progress_message": self.cache_progress_message,
+                    "last_preload_request_id": self.cache_last_preload_request_id,
+                },
             }
 
     async def diagnostics_snapshot(self) -> dict[str, Any]:
@@ -268,12 +344,14 @@ class NodeState:
                     "show_id": self.cache_show_id,
                     "preload_state": self.cache_preload_state,
                     "asset_total": self.cache_asset_total,
-                "cached_assets": self.cache_cached_assets,
-                "bytes_total": self.cache_bytes_total,
-                "bytes_cached": self.cache_bytes_cached,
-                "progress_assets_pct": self.cache_progress_assets_pct,
-                "progress_bytes_pct": self.cache_progress_bytes_pct,
-                "progress_message": self.cache_progress_message,
-                "last_preload_request_id": self.cache_last_preload_request_id,
-            },
-        }
+                    "cached_assets": self.cache_cached_assets,
+                    "bytes_total": self.cache_bytes_total,
+                    "bytes_cached": self.cache_bytes_cached,
+                    "progress_assets_pct": self.cache_progress_assets_pct,
+                    "progress_bytes_pct": self.cache_progress_bytes_pct,
+                    "progress_message": self.cache_progress_message,
+                    "last_preload_request_id": self.cache_last_preload_request_id,
+                },
+                "playback_frames_emitted": self.playback_frames_emitted,
+                "playback_started_ms": self.playback_started_ms,
+            }
