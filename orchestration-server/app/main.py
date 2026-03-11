@@ -268,7 +268,7 @@ async def _startup() -> None:
 
     artnet_sender = ArtNetSender()
 
-    osc_port = int(os.environ.get("OSC_PORT", 8000))
+    osc_port = int(os.environ.get("OSC_PORT", 9000))
     osc_server = OSCServer(host="0.0.0.0", port=osc_port, trigger_callback=osc_trigger_callback)
     await osc_server.start()
 
@@ -1189,6 +1189,39 @@ async def transfer_assets(body: AssetTransferRequest) -> dict[str, object]:
     }
     command_ledger.finalize_request("asset_transfer", body.request_id, response)
     return response
+
+
+@app.post("/api/v1/operators/play", dependencies=[Depends(require_role(["operator"]))])
+async def operator_play(body: OperatorCommandRequest) -> dict[str, object]:
+    """Trigger playback across the cluster with a default lead time (SC-129)."""
+    replay = _idempotent_begin_or_raise(
+        scope="operator_play",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
+    # Default to 500ms lead time for synchronized start if not specified
+    now_ms = int(time.time() * 1000)
+    target_time_ms = now_ms + 500
+    
+    command = ControlCommand(
+        version=PROTOCOL_VERSION,
+        command="PLAY_AT",
+        payload=body.payload,
+        target_time_ms=target_time_ms,
+        seq=command_ledger.next_seq(),
+        origin="operator",
+    )
+    target_ids = body.node_ids or await registry.active_node_ids()
+    result = await _dispatch_to_nodes(command, target_ids)
+    
+    # Enrich response with the scheduled time
+    result["play_at"] = target_time_ms
+    
+    command_ledger.finalize_request("operator_play", body.request_id, result)
+    return result
 
 
 @app.post("/api/v1/operators/pause", dependencies=[Depends(require_role(["operator"]))])
