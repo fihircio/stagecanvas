@@ -12,6 +12,7 @@ from .sync_genlock import GenlockSync
 from .layers.generative_ai import GenerativeAILayer
 from .effects import EffectsChain
 from .mapping.pixel_mapper import PixelMapper
+from .mapping.edge_blend import EDGE_BLEND_WGSL, get_edge_blend_params_buffer
 from .audio_engine import AudioEngine
 from .audio_analysis import AudioAnalyzer
 from .layers.ai_segmentation import AISegmenter
@@ -44,6 +45,9 @@ FRAGMENT_SHADER = """
 @group(0) @binding(0) var s: sampler;
 @group(0) @binding(1) var t_main: texture_2d<f32>;
 @group(0) @binding(2) var t_mask: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> eb_params: EdgeBlendParams;
+
+{{EDGE_BLEND_WGSL}}
 
 @fragment
 def main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
@@ -51,7 +55,8 @@ def main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     var mask_alpha = textureSample(t_mask, s, uv).r; // Single channel mask
     
     // Apply soft edge mask
-    color.a = color.a * mask_alpha;
+    let eb_factor = get_edge_blend_factor(uv, eb_params);
+    color.a = color.a * mask_alpha * eb_factor;
     return color;
 }
 """
@@ -85,6 +90,8 @@ class WebGPURendererBridge(RendererBridge):
         self.video_layers: dict[str, VideoLayer] = {}
         self.decoder: Optional[Decoder] = None
         self.pending_swaps: dict[str, dict[str, Any]] = {} # layer_id -> swap_data
+        self.eb_buffer = None
+        self.eb_params = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0, "gamma": 2.2, "curve_type": "power"}
 
     async def connect(self, node_id: str, label: str) -> None:
         self.node_id = node_id
@@ -121,13 +128,15 @@ class WebGPURendererBridge(RendererBridge):
         print(f"[gpu-renderer] Connected and optimized pipeline initialized.")
 
     def _setup_pipeline(self):
+        full_fshader_code = FRAGMENT_SHADER.replace("{{EDGE_BLEND_WGSL}}", EDGE_BLEND_WGSL)
         vshader = self.device.create_shader_module(code=VERTEX_SHADER)
-        fshader = self.device.create_shader_module(code=FRAGMENT_SHADER)
+        fshader = self.device.create_shader_module(code=full_fshader_code)
 
         bind_group_layout = self.device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT, "sampler": {"type": wgpu.SamplerBindingType.filtering}},
             {"binding": 1, "visibility": wgpu.ShaderStage.FRAGMENT, "texture": {"sample_type": wgpu.TextureSampleType.float}},
-            {"binding": 2, "visibility": wgpu.ShaderStage.FRAGMENT, "texture": {"sample_type": wgpu.TextureSampleType.float}}
+            {"binding": 2, "visibility": wgpu.ShaderStage.FRAGMENT, "texture": {"sample_type": wgpu.TextureSampleType.float}},
+            {"binding": 3, "visibility": wgpu.ShaderStage.FRAGMENT, "buffer": {"type": wgpu.BufferBindingType.uniform}}
         ])
 
         pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[bind_group_layout])
@@ -177,7 +186,11 @@ class WebGPURendererBridge(RendererBridge):
         self.num_indices = len(i_data) // 4
         
         # Build initial edge mask (white mask so no blending initially)
-        self.mask_data = generate_edge_blend_mask(1024, 1024)
+        # self.mask_data = generate_edge_blend_mask(1024, 1024) # Removed CPU mask
+        
+        # Create Edge Blend Uniform Buffer
+        eb_data = get_edge_blend_params_buffer(**self.eb_params)
+        self.eb_buffer = self.device.create_buffer_with_data(data=eb_data, usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST)
         
         # print(f"[gpu-renderer] Setting mapping config: {json.dumps(mapping_config)[:100]}...")
 
@@ -215,6 +228,23 @@ class WebGPURendererBridge(RendererBridge):
             if region:
                 self.canvas_region = region
                 print(f"[gpu-renderer] Assigned Canvas Region: {self.canvas_region['width']}x{self.canvas_region['height']} at ({self.canvas_region['global_x']}, {self.canvas_region['global_y']})")
+            
+            # SC-120: Update Soft-Edge Blending params from config
+            eb_config = output.get("edge_blend", {})
+            if eb_config:
+                new_params = {
+                    "left": eb_config.get("left", 0.0),
+                    "right": eb_config.get("right", 0.0),
+                    "top": eb_config.get("top", 0.0),
+                    "bottom": eb_config.get("bottom", 0.0),
+                    "gamma": eb_config.get("gamma", 2.2),
+                    "curve_type": eb_config.get("curve_type", "power")
+                }
+                if new_params != self.eb_params:
+                    self.eb_params = new_params
+                    if self.device and self.eb_buffer:
+                        eb_data = get_edge_blend_params_buffer(**self.eb_params)
+                        self.device.queue.write_buffer(self.eb_buffer, 0, eb_data)
                 print(f"[gpu-renderer] Pipeline clipping/viewport adjusted for Mega-Canvas segmentation.")
 
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:

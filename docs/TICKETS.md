@@ -2290,13 +2290,13 @@ Files allowed:
 - `orchestration-server/app/services/media_browser.py`
 - `control-ui/components/media-library.tsx`
 Acceptance:
-- [ ] Implement a folder browser in the Orchestration Server that lists local drive contents.
-- [ ] Add "Add to Library" button in the UI that registers a local file path as a playable asset.
-- [ ] Support Drag & Drop from the OS into the Media Library panel.
+- [x] Implement a folder browser in the Orchestration Server that lists local drive contents.
+- [x] Add "Add to Library" button in the UI that registers a local file path as a playable asset.
+- [x] Support Drag & Drop from the OS into the Media Library panel.
 Checks:
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-116 Automated Thumbnail & Metadata Extraction
 
@@ -2307,13 +2307,13 @@ Files allowed:
 - `orchestration-server/app/services/metadata_extractor.py`
 - `orchestration-server/app/main.py`
 Acceptance:
-- [ ] Automatically run FFmpeg to extract a 320x180 JPG thumbnail upon ingestion.
-- [ ] Extract and store duration, resolution, and frame rate in the `MediaRegistry`.
-- [ ] Display thumbnails in the `MediaLibrary` UI component.
+- [x] Automatically run FFmpeg to extract a 320x180 JPG thumbnail upon ingestion.
+- [x] Extract and store duration, resolution, and frame rate in the `MediaRegistry`.
+- [x] Display thumbnails in the `MediaLibrary` UI component.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests`
+- [x] `python -m unittest discover -s orchestration-server/tests`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-117 Native File System Watcher
 
@@ -2324,13 +2324,13 @@ Files allowed:
 - `orchestration-server/app/services/file_watcher.py`
 - `orchestration-server/requirements.txt`
 Acceptance:
-- [ ] Use `watchdog` to monitor a designated "Auto-Import" folder.
-- [ ] Automatically register new video files to the library.
-- [ ] Mark assets as "Missing" if the local file is deleted.
+- [x] Use `watchdog` to monitor a designated "Auto-Import" folder.
+- [x] Automatically register new video files to the library.
+- [x] Mark assets as "Missing" if the local file is deleted.
 Checks:
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-118 Multi-Format Hardware Decoding (ProRes/DXV)
 
@@ -2341,12 +2341,12 @@ Files allowed:
 - `render-node/app/layers/video_layer.py`
 - `render-node/app/renderer_gpu.py`
 Acceptance:
-- [ ] Enhance the WebGPU video layer to support native decoding of ProRes 422/4444 and DXV3.
-- [ ] Ensure sub-frame timing precision is maintained for high-bitrate professional media.
+- [x] Enhance the WebGPU video layer to support native decoding of ProRes 422/4444 and DXV3.
+- [x] Ensure sub-frame timing precision is maintained for high-bitrate professional media.
 Checks:
-- [ ] `make render-test`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-119 Asset Hot-Swapping & Live Reload
 
@@ -2357,10 +2357,96 @@ Files allowed:
 - `orchestration-server/app/main.py`
 - `render-node/app/bridge.py`
 Acceptance:
-- [ ] Implement "Hot Swap" command to replace the source file of an active layer.
-- [ ] New asset should load into GPU memory in the background and swap on the next Genlock pulse.
-- [ ] Zero hitch or dropped frame during the transition.
+- [x] Implement "Hot Swap" command to replace the source file of an active layer.
+- [x] New asset should load into GPU memory in the background and swap on the next Genlock pulse.
+- [x] Zero hitch or dropped frame during the transition.
+Checks:
+- [x] `make render-test`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-120 Dynamic Soft-Edge Blending (Warp Engine)
+
+Ticket: SC-120
+Scope: Implement adjustable soft-edge blending for multi-projector setups.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/mapping/edge_blend.py`
+- `render-node/app/renderer_gpu.py`
+Acceptance:
+- [ ] Implement a Gaussian or Bezier-based edge blend shader in the WebGPU pipeline.
+- [ ] Blend curve and width must be adjustable via the snapshot API.
+- [ ] Verified zero visible seams in a 25% overlap configuration.
+Checks:
+- [ ] `make render-compile`
+- [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-121 MIDI / OSC Learning & Mapping UI
+
+Ticket: SC-121
+Scope: Interactive system to map hardware controllers to StageCanvas parameters.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/io/midi_osc_mapper.py`
+- `control-ui/components/mapping-modal.tsx`
+Acceptance:
+- [ ] "Learn" button in UI that waits for incoming MIDI CC or OSC message.
+- [ ] Successfully binds a hardware knob to a Layer opacity/transform property.
+- [ ] Persistent mapping configuration saved in `orchestration.db`.
+Checks:
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-122 Global Timeline Master Pane
+
+Ticket: SC-122
+Scope: Unified view of all media tracks and rules across the cluster.
+Owner: feature-agent
+Files allowed:
+- `control-ui/components/master-timeline.tsx`
+- `control-ui/app/designer/page.tsx`
+Acceptance:
+- [ ] Zoomable and scrollable timeline showing all active layers.
+- [ ] Drag & Drop support for moving media assets onto the timeline.
+- [ ] Visual indication of Genlock/Timecode sync status on the playhead.
+Checks:
+- [ ] `cd control-ui && npm run build`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-123 NDI 5 Discovery & Metadata Bridge
+
+Ticket: SC-123
+Scope: Full NDI 5 SDK integration for advanced network sources.
+Owner: lead-agent
+Files allowed:
+- `render-node/app/output/ndi_sender.py`
+- `render-node/requirements.txt`
+Acceptance:
+- [ ] Replace NDI stubs with actual NDI 5 SDK native calls.
+- [ ] Support NDI metadata (Tally, Source Names, Connection Status).
+- [ ] Discoverable via mDNS with custom StageCanvas naming conventions.
 Checks:
 - [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-124 Show Operations Logging & Diagnostics
+
+Ticket: SC-124
+Scope: Comprehensive system logs for professional show validation.
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/services/logger.py`
+- `orchestration-server/app/main.py`
+Acceptance:
+- [ ] Logs every cue fire, hot-swap, and PTP drift event with millisecond precision.
+- [ ] "Export Logs" button in UI (CSV/JSON).
+- [ ] Real-time "Log Terminal" view in the Operator Dashboard.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests`
 Deliverable:
 - [ ] branch + handoff note

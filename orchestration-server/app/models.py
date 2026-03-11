@@ -444,3 +444,22 @@ class TokenData(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+# ---------------------------------------------------------------------------
+# SC-121 — MIDI / OSC Learning
+# ---------------------------------------------------------------------------
+
+class MappingEntry(BaseModel):
+    mapping_id: str
+    source_type: Literal["midi_cc", "osc"]
+    source_address: str
+    target_layer_id: str
+    target_property: str
+    min_val: float = 0.0
+    max_val: float = 1.0
+
+
+class LearnRequest(BaseModel):
+    target_layer_id: str
+    target_property: str
