@@ -49,6 +49,8 @@ from .io.midi_handler import MIDIHandler
 from .io.artnet_server import ArtNetServer, ArtNetToLayerMapper
 from .io.psn_listener import PSNListener
 from .cluster_manager import ClusterManager
+from .services.transcoder import TranscodeWorker
+from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
 registry = NodeRegistry()
@@ -72,6 +74,28 @@ osc_server: OSCServer | None = None
 midi_handler: MIDIHandler | None = None
 artnet_server: ArtNetServer | None = None
 cluster_manager: ClusterManager | None = None
+transcode_worker: TranscodeWorker | None = None
+zeroconf: Zeroconf | None = None
+
+class NodeDiscoveryListener(ServiceListener):
+    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        pass
+
+    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        print(f"[discovery] Service {name} removed")
+
+    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        info = zc.get_service_info(type_, name)
+        if info:
+            node_id = info.properties.get(b"node_id", b"unknown").decode("utf-8")
+            label = info.properties.get(b"label", b"").decode("utf-8")
+            print(f"[discovery] Found node {node_id} ({label}) at {info.parsed_addresses()}")
+            # Auto-register node
+            asyncio.create_task(registry.register(RegisterNodeRequest(
+                node_id=node_id,
+                label=label,
+                capabilities={"discovered": True, "address": info.parsed_addresses()[0] if info.parsed_addresses() else None}
+            )))
 psn_listener: PSNListener | None = None
 collaboration_manager = CollaborationManager()
 
@@ -170,6 +194,25 @@ async def _startup() -> None:
     cluster_manager = ClusterManager(role=role, primary_url=primary_url)
     await cluster_manager.start()
 
+    # Transcoder
+    async def transcode_progress_callback(job_id: str, progress: float):
+        await transcode_queue.update(job_id, progress=progress)
+
+    global transcode_worker
+    transcode_worker = TranscodeWorker(
+        transcode_queue=transcode_queue,
+        media_registry=media_registry,
+        media_root=MEDIA_STORAGE_DIR,
+        progress_callback=transcode_progress_callback
+    )
+    app.state.transcode_task = asyncio.create_task(transcode_worker.run_loop())
+
+    # Zeroconf Discovery
+    global zeroconf
+    zeroconf = Zeroconf()
+    listener = NodeDiscoveryListener()
+    browser = ServiceBrowser(zeroconf, "_stagecanvas._tcp.local.", listener)
+
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
@@ -189,6 +232,10 @@ async def _shutdown() -> None:
         psn_listener.stop()
     if cluster_manager:
         await cluster_manager.stop()
+    if transcode_worker:
+        transcode_worker.stop()
+    if zeroconf:
+        zeroconf.close()
 
 
 @app.get("/health")
@@ -971,6 +1018,7 @@ async def operator_socket(ws: WebSocket) -> None:
                     "type": "NODES_SNAPSHOT",
                     "protocol_version": PROTOCOL_VERSION,
                     "nodes": await registry.list_nodes(),
+                    "transcode_jobs": [job.model_dump(mode="json") for job in await transcode_queue.list_jobs()],
                     "drift_slo": await registry.drift_summary(),
                     "play_at_min_lead_ms": MIN_PLAY_AT_LEAD_MS,
                     "locks": collaboration_manager.get_locks(),

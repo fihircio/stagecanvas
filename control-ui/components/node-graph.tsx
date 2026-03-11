@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -16,6 +16,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { compileGraphToRules } from '../lib/compiler';
+import { useLocks } from '../hooks/use-locks';
 
 // Custom Nodes
 const CameraInputNode = ({ data }: NodeProps) => {
@@ -63,17 +64,40 @@ const initialEdges = [
   { id: 'e2-3', source: '2', target: '3' },
 ];
 
+const DEFAULT_USER_ID = `operator-${Math.random().toString(36).slice(2, 7)}`;
+
 export function NodeGraph() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [deployStatus, setDeployStatus] = useState<string | null>(null);
+  const { locks, takeControl, releaseControl, isLockedByOther } = useLocks();
+  const [userId, setUserId] = useState<string>('');
+
+  useEffect(() => {
+    const stored = localStorage.getItem('sc-user-id') || DEFAULT_USER_ID;
+    setUserId(stored);
+    localStorage.setItem('sc-user-id', stored);
+  }, []);
+
+  const resourceId = 'node-graph-main';
+  const isLocked = isLockedByOther(resourceId);
+  const hasControl = locks[resourceId]?.user_id === userId;
 
   const onConnect = useCallback(
     (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
 
+  const toggleControl = async () => {
+    if (hasControl) {
+      await releaseControl(resourceId, userId);
+    } else {
+      await takeControl(resourceId, userId);
+    }
+  };
+
   const handleDeploy = async () => {
+    if (isLocked) return;
     setDeployStatus("Deploying...");
     try {
       const rules = compileGraphToRules(nodes, edges);
@@ -129,9 +153,30 @@ export function NodeGraph() {
           onMouseLeave={(e) => e.currentTarget.style.background = '#0070f3'}
           onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
           onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          disabled={isLocked || !hasControl}
         >
-          🚀 Deploy Rules
+          {isLocked ? '🔒 Locked' : hasControl ? '🚀 Deploy Rules' : '⚠️ Need Control'}
         </button>
+        <button
+          onClick={toggleControl}
+          style={{
+            padding: '8px 16px',
+            background: hasControl ? '#aa0000' : '#00aa55',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}
+        >
+          {hasControl ? 'Release Control' : 'Take Control'}
+        </button>
+        {isLocked && !hasControl && (
+          <div style={{ color: '#ff4444', fontSize: '12px', fontWeight: 'bold' }}>
+            Locked by: {locks[resourceId]?.user_id}
+          </div>
+        )}
         {deployStatus && (
           <div style={{
             background: deployStatus.includes('Error') ? '#ff4444' : '#00aa55',
