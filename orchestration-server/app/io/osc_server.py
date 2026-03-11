@@ -5,7 +5,7 @@ from pythonosc.dispatcher import Dispatcher
 import time
 
 class OSCServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 9000, trigger_callback: Callable[[dict[str, Any]], None] = None):
+    def __init__(self, host: str = "0.0.0.0", port: int = 10101, trigger_callback: Callable[[dict[str, Any]], None] = None):
         self.host = host
         self.port = port
         self.trigger_callback = trigger_callback

@@ -78,6 +78,8 @@ from .metadata_extractor import MetadataExtractor
 from .media_browser import MediaBrowser
 from .services.file_watcher import FileWatcherService
 from .services.logger import ShowLogger
+from .engine.timeline_scheduler import TimelineScheduler
+from .engine.show_runtime import ShowRuntime
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
 app = FastAPI(
@@ -117,6 +119,8 @@ zeroconf: Zeroconf | None = None
 ltc_reader: LTCReader | None = None
 show_logger = ShowLogger(log_dir=str(Path(__file__).resolve().parent.parent / "data" / "logs"))
 midi_osc_mapper: MidiOscMapper | None = None
+timeline_scheduler: TimelineScheduler | None = None
+show_runtime: ShowRuntime | None = None
 
 # SC-112: Stateful logic tracking
 logic_state: dict[str, int] = {}
@@ -232,8 +236,8 @@ async def _transfer_loop() -> None:
 
 @app.on_event("startup")
 async def _startup() -> None:
-    global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
     global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service, cloud_sync, file_watcher, midi_osc_mapper
+    global timeline_scheduler, show_runtime
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
 
     DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -245,15 +249,26 @@ async def _startup() -> None:
     
     # [MOVED TO MODULE LEVEL] logic_state, _fire_trigger_internal
 
-    # MidiOscMapper initialization
-    async def mapper_dispatch(cmd: ControlCommand):
-        target_ids = await registry.active_node_ids()
-        await _dispatch_to_nodes(cmd, target_ids)
-
     midi_osc_mapper = MidiOscMapper(
         db_path=DATA_DIR / "orchestration.db",
         dispatch_callback=mapper_dispatch
     )
+
+    # Initialize Timeline Scheduler and Show Runtime
+    async def scheduler_dispatch(cmd_type: str, payload: dict):
+        command = ControlCommand(
+            version=PROTOCOL_VERSION,
+            command=cmd_type,
+            payload=payload,
+            seq=command_ledger.next_seq(),
+            origin="scheduler",
+        )
+        await broadcast_command(command)
+
+    timeline_scheduler = TimelineScheduler(dispatch_callback=scheduler_dispatch)
+    show_runtime = ShowRuntime(timeline_repo=timeline_repo, scheduler=timeline_scheduler)
+    # Load demo-show by default
+    show_runtime.load_show("demo-show")
 
     # Internal trigger callback for OSC
     async def osc_trigger_callback(payload: dict):
@@ -268,7 +283,7 @@ async def _startup() -> None:
 
     artnet_sender = ArtNetSender()
 
-    osc_port = int(os.environ.get("OSC_PORT", 9000))
+    osc_port = int(os.environ.get("OSC_PORT", 10101))
     osc_server = OSCServer(host="0.0.0.0", port=osc_port, trigger_callback=osc_trigger_callback)
     await osc_server.start()
 
@@ -1220,6 +1235,10 @@ async def operator_play(body: OperatorCommandRequest) -> dict[str, object]:
     # Enrich response with the scheduled time
     result["play_at"] = target_time_ms
     
+    # Also trigger the local timeline scheduler
+    if show_runtime:
+        await show_runtime.play()
+    
     command_ledger.finalize_request("operator_play", body.request_id, result)
     return result
 
@@ -1243,6 +1262,10 @@ async def operator_pause(body: OperatorCommandRequest) -> dict[str, object]:
     )
     target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
+    
+    if show_runtime:
+        await show_runtime.pause()
+        
     command_ledger.finalize_request("operator_pause", body.request_id, result)
     return result
 
@@ -1266,6 +1289,10 @@ async def operator_stop(body: OperatorCommandRequest) -> dict[str, object]:
     )
     target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
+    
+    if show_runtime:
+        await show_runtime.stop()
+        
     command_ledger.finalize_request("operator_stop", body.request_id, result)
     return result
 
@@ -1323,6 +1350,11 @@ async def operator_seek(body: OperatorCommandRequest) -> dict[str, object]:
     )
     target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
+    
+    if show_runtime:
+        pos = int(body.payload.get("position_ms", 0))
+        await show_runtime.seek(pos)
+        
     command_ledger.finalize_request("operator_seek", body.request_id, result)
     return result
 

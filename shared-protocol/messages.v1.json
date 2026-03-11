@@ -52,7 +52,7 @@
           "type": "object",
           "properties": {
             "type": { "const": "COMMAND" },
-            "command": { "enum": ["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"] },
+            "command": { "enum": ["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "PLAY_CLIP"] },
             "target_time_ms": { "type": "integer", "minimum": 0 },
             "payload": {
               "type": "object",

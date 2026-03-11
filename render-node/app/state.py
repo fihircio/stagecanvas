@@ -12,7 +12,7 @@ from .bridge import Decoder, NullDecoder, NullRendererBridge, RendererBridge
 from .sync_genlock import GenlockSync
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
-CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS"]
+CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS", "PLAY_CLIP"]
 
 
 @dataclass
@@ -319,6 +319,10 @@ class NodeState:
                 bridge_call = ("ping", {})
             elif command == "UPDATE_LAYERS":
                 bridge_call = ("update_layers", {"layers": payload.get("layers", [])})
+            elif command == "PLAY_CLIP":
+                # For now, translate PLAY_CLIP to a targeted update or bridge-specific call.
+                # In more advanced versions, this would trigger specific layer playback.
+                bridge_call = ("play_at", {"show_id": self.show_id, "target_time_ms": target_time_ms, "payload": payload})
 
         if bridge_call is None:
             return

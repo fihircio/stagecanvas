@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .config import PROTOCOL_VERSION
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
-CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS", "HOT_SWAP"]
+CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS", "HOT_SWAP", "PLAY_CLIP"]
 ProtocolVersion = Literal["v1"]
 TimeSyncSource = Literal["system", "ntp", "ptp"]
 MediaAssetStatus = Literal["REGISTERED", "INGESTING", "READY", "FAILED", "MISSING"]

@@ -3,6 +3,7 @@ import unittest
 import time
 from pathlib import Path
 import sys
+from unittest.mock import MagicMock
 
 # Setup path for imports
 RENDER_ROOT = Path(__file__).resolve().parents[1]
@@ -11,7 +12,6 @@ if str(RENDER_ROOT) not in sys.path:
 
 from app.state import NodeState
 from app.bridge import NullRendererBridge, NullDecoder
-from app.layers.video_layer import VideoLayer
 
 class E2ECompositorTests(unittest.IsolatedAsyncioTestCase):
     async def test_compositor_visual_output_flow(self):
@@ -24,8 +24,9 @@ class E2ECompositorTests(unittest.IsolatedAsyncioTestCase):
         decoder = NullDecoder()
         state = NodeState(node_id="test-render-1", label="RENDER-1", bridge=bridge, decoder=decoder)
         
-        # 2. Add a Video Layer (simulated)
-        layer = VideoLayer("layer-1")
+        # 2. Add a Video Layer (simulated mock)
+        layer = MagicMock()
+        layer.layer_id = "layer-1"
         # In a real scenario, the bridge/renderer would hold this. 
         # Here we test the state machine's transition and timing.
         
