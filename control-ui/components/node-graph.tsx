@@ -89,7 +89,7 @@ const nodeTypes = {
   logic: LogicNode,
 };
 
-const initialNodes = [
+const initialNodes: any[] = [
   { id: '1', type: 'cameraInput', position: { x: 50, y: 150 }, data: { label: 'Camera M1' } },
   { id: '2', type: 'yoloTrigger', position: { x: 300, y: 150 }, data: { label: 'Detect: Person' } },
   { id: '3', type: 'timer', position: { x: 550, y: 50 }, data: { label: 'Intro Delay', delay_ms: 2000 } },

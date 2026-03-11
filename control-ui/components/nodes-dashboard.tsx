@@ -9,6 +9,7 @@ import type {
   PreviewImageResponse,
   TimelineSnapshot,
   TranscodeJobSnapshot,
+  MediaAsset,
 } from "../lib/types";
 import { TimelineMaster } from "./timeline-master";
 import { LogTerminal } from "./log-terminal";
