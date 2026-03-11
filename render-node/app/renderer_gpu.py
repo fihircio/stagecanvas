@@ -313,8 +313,29 @@ class WebGPURendererBridge(RendererBridge):
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:
         print(f"[gpu-renderer] Playing {show_id} at {target_time_ms}...")
 
+    async def play_clip(self, asset_id: str, start_time_ms: int = 0) -> None:
+        print(f"[gpu-renderer] PLAY_CLIP {asset_id} at {start_time_ms}ms")
+        layer_id = asset_id # Simplification for SC-128
+        asset_path = f"assets/{asset_id}.mp4"
+        if layer_id not in self.video_layers and self.device:
+            try:
+                self.video_layers[layer_id] = VideoLayer(self.device, asset_path, layer_id)
+            except Exception as e:
+                print(f"[gpu-renderer] Error playing clip: {e}")
+                return
+        
+        layer = self.video_layers.get(layer_id)
+        if layer:
+            layer.seek(start_time_ms / 1000.0)
+            layer.is_playing = True
+
     async def pause(self) -> None:
         print(f"[gpu-renderer] Paused.")
+
+    async def seek(self, position_ms: int) -> None:
+        print(f"[gpu-renderer] Seek to {position_ms}ms.")
+        for layer in self.video_layers.values():
+            layer.seek(position_ms / 1000.0)
 
     async def stop(self) -> None:
         print(f"[gpu-renderer] Stopped.")

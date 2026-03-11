@@ -35,6 +35,7 @@ class EffectsCapturingBridge(RendererBridge):
     async def connect(self, node_id: str, label: str) -> None: pass
     async def load_show(self, show_id: str, payload: dict) -> None: pass
     async def play_at(self, show_id: str, target_time_ms, payload: dict) -> None: pass
+    async def play_clip(self, asset_id: str, start_time_ms: int = 0) -> None: pass
     async def pause(self) -> None: pass
     async def seek(self, position_ms: int) -> None: pass
     async def stop(self) -> None: pass

@@ -20,6 +20,9 @@ class RecordingBridge(RendererBridge):
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:
         self.events.append(("play_at", {"show_id": show_id, "target_time_ms": target_time_ms, "payload": payload}))
 
+    async def play_clip(self, asset_id: str, start_time_ms: int = 0) -> None:
+        pass
+
     async def pause(self) -> None:
         self.events.append(("pause", {}))
 

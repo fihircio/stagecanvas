@@ -21,6 +21,9 @@ class RendererBridge(ABC):
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None: ...
 
     @abstractmethod
+    async def play_clip(self, asset_id: str, start_time_ms: int = 0) -> None: ...
+
+    @abstractmethod
     async def pause(self) -> None: ...
 
     @abstractmethod
@@ -86,6 +89,9 @@ class NullRendererBridge(RendererBridge):
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:
         return
 
+    async def play_clip(self, asset_id: str, start_time_ms: int = 0) -> None:
+        return
+
     async def pause(self) -> None:
         return
 
@@ -136,6 +142,15 @@ class MockUnityBridge(RendererBridge):
             }
         )
 
+    async def play_clip(self, asset_id: str, start_time_ms: int = 0) -> None:
+        await self._emit(
+            {
+                "event": "play_clip",
+                "asset_id": asset_id,
+                "start_time_ms": start_time_ms,
+            }
+        )
+
     async def pause(self) -> None:
         await self._emit({"event": "pause"})
 
@@ -160,10 +175,12 @@ class MockUnityBridge(RendererBridge):
             await self._emit({"event": "tick", "status": snapshot.get("status"), "pos": snapshot.get("position_ms")})
 
     async def close(self) -> None:
-        if self._printer_task is not None:
-            self._printer_task.cancel()
+        task = self._printer_task
+        if task is not None:
+            task.cancel()
             with suppress(asyncio.CancelledError):
-                await self._printer_task
+                # Cannot directly await cancelled task sometimes w/o wrapping, but we'll try ignoring the lint or do a safe await
+                await task
 
     async def _emit(self, payload: dict[str, Any]) -> None:
         await self._queue.put(json.dumps(payload))
