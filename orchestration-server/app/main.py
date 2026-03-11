@@ -12,7 +12,8 @@ from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import MIN_PLAY_AT_LEAD_MS, PROTOCOL_VERSION
@@ -51,9 +52,11 @@ from .collaboration import CollaborationManager
 from .io.osc_server import OSCServer
 from .io.midi_handler import MIDIHandler
 from .io.artnet_server import ArtNetServer, ArtNetToLayerMapper
+from .io.artnet_sender import ArtNetSender
 from .io.psn_listener import PSNListener
 from .cluster_manager import ClusterManager
 from .services.transcoder import TranscodeWorker
+from .services.archiver import ArchiverService
 from .io.ltc_reader import LTCReader, LTCSyncMode
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
@@ -81,8 +84,10 @@ preview_image_last_request: dict[str, int] = {}
 osc_server: OSCServer | None = None
 midi_handler: MIDIHandler | None = None
 artnet_server: ArtNetServer | None = None
+artnet_sender: ArtNetSender | None = None
 cluster_manager: ClusterManager | None = None
 transcode_worker: TranscodeWorker | None = None
+archiver_service: ArchiverService | None = None
 zeroconf: Zeroconf | None = None
 ltc_reader: LTCReader | None = None
 
@@ -131,6 +136,9 @@ async def _startup() -> None:
     async def osc_trigger_callback(payload: dict):
         # We simulate firing the trigger internally
         body = TriggerFireRequest(**payload)
+        
+    global artnet_sender
+    artnet_sender = ArtNetSender()
         rule = trigger_rules.get(body.rule_id)
         if rule is not None:
             event = TriggerEvent(
@@ -207,7 +215,12 @@ async def _startup() -> None:
     async def transcode_progress_callback(job_id: str, progress: float):
         await transcode_queue.update(job_id, progress=progress)
 
-    global transcode_worker
+    global transcode_worker, cluster_manager, zeroconf, ltc_reader, archiver_service
+    
+    DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+    archiver_service = ArchiverService(DATA_DIR)
+
+    timeline_repo.init_db()
     transcode_worker = TranscodeWorker(
         transcode_queue=transcode_queue,
         media_registry=media_registry,
@@ -440,6 +453,58 @@ async def get_transcode_job(job_id: str) -> dict[str, Any]:
     return {"job": job.to_response().model_dump(mode="json")}
 
 
+# ---------------------------------------------------------------------------
+# SC-109 ARCHIVE ENDPOINTS
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/archive/export", tags=["archive"])
+async def start_archive_export() -> dict[str, Any]:
+    """Start bundling the current show into a portable .stage archive."""
+    if archiver_service is None:
+        raise HTTPException(status_code=503, detail="Archiver service not available")
+    job_id = await archiver_service.create_export_job()
+    return {"ok": True, "job_id": job_id}
+
+
+@app.post("/api/v1/archive/import", tags=["archive"])
+async def start_archive_import(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Upload a .stage archive to replace the current session state."""
+    if archiver_service is None:
+        raise HTTPException(status_code=503, detail="Archiver service not available")
+        
+    import uuid
+    tmp_path = archiver_service.archives_dir / f"upload_{uuid.uuid4().hex}.stage"
+    with open(tmp_path, "wb") as f:
+        f.write(await file.read())
+        
+    job_id = await archiver_service.create_import_job(tmp_path)
+    return {"ok": True, "job_id": job_id}
+
+
+@app.get("/api/v1/archive/jobs/{job_id}", tags=["archive"])
+async def get_archive_job(job_id: str) -> dict[str, Any]:
+    """Check the status of an ongoing export or import job."""
+    if archiver_service is None:
+        raise HTTPException(status_code=503, detail="Archiver service not available")
+    job = archiver_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"job": job.model_dump(mode="json")}
+
+
+@app.get("/api/v1/archive/download/{filename}", tags=["archive"])
+async def download_archive(filename: str):
+    """Download a completed .stage archive."""
+    if archiver_service is None:
+        raise HTTPException(status_code=503, detail="Archiver service not available")
+    file_path = archiver_service.archives_dir / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Archive not found")
+    return FileResponse(path=file_path, filename=filename, media_type="application/zip")
+
+
+# ---------------------------------------------------------------------------
+# MEDIA TRANSFER (Operator -> Nodes)
 @app.patch("/api/v1/transcode/jobs/{job_id}")
 async def update_transcode_job(job_id: str, body: TranscodeJobUpdateRequest) -> dict[str, object]:
     job = await transcode_queue.update(job_id, status=body.status, error_message=body.error_message)
@@ -561,6 +626,29 @@ async def fire_trigger(body: TriggerFireRequest) -> dict[str, Any]:
 async def list_trigger_events() -> dict[str, Any]:
     """Retrieve the recent history of fired trigger events."""
     return {"events": [event.model_dump(mode="json") for event in trigger_events]}
+
+
+from pydantic import BaseModel
+
+class DMXBroadcastRequest(BaseModel):
+    dmx_payloads: dict[str, str]
+
+@app.post("/api/v1/io/dmx/broadcast", tags=["io"])
+async def broadcast_dmx(body: DMXBroadcastRequest) -> dict[str, Any]:
+    """Broadcast raw DMX data (universes with hex-encoded byte payloads) over ArtNet."""
+    if not artnet_sender:
+        raise HTTPException(status_code=503, detail="ArtNetSender not initialized")
+    
+    for universe_str, hex_payload in body.dmx_payloads.items():
+        try:
+            universe = int(universe_str)
+            data = bytes.fromhex(hex_payload)
+            artnet_sender.send_universe(universe, data)
+        except Exception:
+            # Silently skip malformed data for performance
+            continue
+            
+    return {"ok": True}
 
 
 @app.get("/api/v1/slo")

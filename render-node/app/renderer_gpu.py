@@ -11,6 +11,9 @@ from .output.webrtc_stream import WebRTCStreamer
 from .sync_genlock import GenlockSync
 from .layers.generative_ai import GenerativeAILayer
 from .effects import EffectsChain
+from .mapping.pixel_mapper import PixelMapper
+from .audio_engine import AudioEngine
+from .audio_analysis import AudioAnalyzer
 
 # Vertex shader with dynamic buffers
 VERTEX_SHADER = """
@@ -63,6 +66,9 @@ class WebGPURendererBridge(RendererBridge):
         self.effects: Optional[EffectsChain] = None
         self.layer_effects: dict[str, list[dict[str, Any]]] = {}
         self.ai_layers: dict[str, GenerativeAILayer] = {}
+        # SC-106/107: Audio subsystems
+        self.audio_engine: Optional[AudioEngine] = None
+        self.audio_analyzer: Optional[AudioAnalyzer] = None
         self.frame_data_stub = b"\x00" * 1024 # Stub frame data
         self.render_target = None
         self.staging_buffer = None
@@ -70,6 +76,7 @@ class WebGPURendererBridge(RendererBridge):
         self.height = 2160
         self.canvas_region = {"global_x": 0, "global_y": 0, "width": 1920, "height": 1080}
         self.node_id = None
+        self.pixel_mapper: Optional[PixelMapper] = None
 
     async def connect(self, node_id: str, label: str) -> None:
         self.node_id = node_id
@@ -91,6 +98,15 @@ class WebGPURendererBridge(RendererBridge):
         self.webrtc.start()
         
         self.effects = EffectsChain(self.device)
+        
+        # SC-106: Start Audio Engine (16 channels, non-blocking daemon thread)
+        self.audio_engine = AudioEngine(num_channels=16)
+        self.audio_engine.start()
+        # SC-107: Create analyzer
+        self.audio_analyzer = AudioAnalyzer(sample_rate=48000)
+        print(f"[gpu-renderer] Audio engine started (16-ch @ 48kHz).")
+        
+        self.pixel_mapper = PixelMapper([], self.width, self.height)
         
         self.is_connected = True
         print(f"[gpu-renderer] Connected and optimized pipeline initialized.")
@@ -270,6 +286,18 @@ class WebGPURendererBridge(RendererBridge):
         
         # [SIMULATED] Final compositing to self.render_target here...
         
+        # SC-107: Audio-reactive update for generative AI layers
+        if self.audio_engine and self.audio_analyzer and self.ai_layers:
+            # Drain one frame from channel 0 (kick) and channel 1 (snare) for analysis
+            kick_frames = self.audio_engine.get_channel_samples(0, 1)
+            snare_frames = self.audio_engine.get_channel_samples(1, 1)
+            samples = (kick_frames[0] if kick_frames else []) + (snare_frames[0] if snare_frames else [])
+            if samples:
+                peaks = self.audio_analyzer.process_frame(samples)
+                for ai_layer in self.ai_layers.values():
+                    ai_layer.update_audio_peaks(peaks)
+
+        
         # Copy texture to staging buffer
         command_encoder.copy_texture_to_buffer(
             {"texture": self.render_target},
@@ -288,6 +316,16 @@ class WebGPURendererBridge(RendererBridge):
             frame_view = memoryview(bytearray(self.width * self.height * 4)) # Proxy for mapped buffer
             self.ndi.send_frame(frame_view)
             self.webrtc.push_frame(frame_view)
+            
+            # Extract pixel mapped DMX data
+            if self.pixel_mapper:
+                dmx_payloads = self.pixel_mapper.map_frame(frame_view)
+                if dmx_payloads:
+                    # Send to orchestrator via HTTP or WebSocket
+                    # For performance, this would be a direct UDP packet to the orchestrator's ArtNet broadcast port 
+                    # or an async WS payload. We push it to the snapshot for this stub.
+                    snapshot["dmx_payloads"] = {k: v.hex() for k, v in dmx_payloads.items()}
+                    
         except Exception as e:
             print(f"[gpu-renderer] Readout optimization failed: {e}")
 

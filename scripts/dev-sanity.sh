@@ -76,7 +76,7 @@ run_step "orchestration dependency install" "$ORCH_LOG" \
 
 echo "[2/4] Ensure control-ui deps" | tee -a "$REPORT"
 run_step "control-ui dependency install" "$UI_LOG" \
-  bash -lc "cd \"$ROOT_DIR/control-ui\" && npm install"
+  bash -lc "cd \"$ROOT_DIR/control-ui\" && npm install --legacy-peer-deps"
 
 echo "[3/4] Start orchestration-server dev" | tee -a "$REPORT"
 (

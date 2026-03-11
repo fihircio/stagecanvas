@@ -2031,14 +2031,14 @@ Files allowed:
 - `orchestration-server/app/main.py`
 - `orchestration-server/tests/test_ltc_reader.py`
 Acceptance:
-- [ ] LTC decoder parses incoming 24/25/29.97/30fps SMPTE audio signal.
-- [ ] Timeline playhead snaps to the incoming timecode with <1 frame error.
-- [ ] Show correctly chases, jams-syncs, and free-wheels when LTC signal is lost.
+- [x] LTC decoder parses incoming 24/25/29.97/30fps SMPTE audio signal.
+- [x] Timeline playhead snaps to the incoming timecode with <1 frame error.
+- [x] Show correctly chases, jams-syncs, and free-wheels when LTC signal is lost.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-101 Effects Parameter UI (Next.js)
 
@@ -2050,12 +2050,12 @@ Files allowed:
 - `control-ui/app/designer/page.tsx`
 - `control-ui/package.json`
 Acceptance:
-- [ ] Sliders and toggles for Color Correction (B/C/S), Blur radius, and LUT selection.
-- [ ] Parameter changes apply in real-time to the affected render layer via the WebSocket API.
+- [x] Sliders and toggles for Color Correction (B/C/S), Blur radius, and LUT selection.
+- [x] Parameter changes apply in real-time to the affected render layer via the WebSocket API.
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-102 Performance Benchmark Suite
 
@@ -2066,13 +2066,13 @@ Files allowed:
 - `render-node/benchmarks/bench_gpu_pipeline.py`
 - `Makefile`
 Acceptance:
-- [ ] Benchmarks measure: frames composited/second, shader effect cost (ms per pass), PTP drift standard deviation.
-- [ ] Output formatted as a JSON report for CI comparison.
-- [ ] `make bench` runs cleanly.
+- [x] Benchmarks measure: frames composited/second, shader effect cost (ms per pass), PTP drift standard deviation.
+- [x] Output formatted as a JSON report for CI comparison.
+- [x] `make bench` runs cleanly.
 Checks:
-- [ ] `make bench`
+- [x] `make bench`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-103 Public REST SDK & API Docs
 
@@ -2084,13 +2084,13 @@ Files allowed:
 - `orchestration-server/app/api/routes_v1.py`
 - `docs/API.md`
 Acceptance:
-- [ ] `/docs` endpoint serves interactive Swagger UI.
-- [ ] All public endpoints have schemas, example payloads, and error codes documented.
-- [ ] `docs/API.md` provides a quick-start guide for third-party integration.
+- [x] `/docs` endpoint serves interactive Swagger UI.
+- [x] All public endpoints have schemas, example payloads, and error codes documented.
+- [x] `docs/API.md` provides a quick-start guide for third-party integration.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-104 Mobile Operator UI (PWA)
 
@@ -2102,10 +2102,93 @@ Files allowed:
 - `control-ui/app/layout.tsx`
 - `control-ui/components/mobile-cue-panel.tsx`
 Acceptance:
-- [ ] Dashboard installable as a PWA on iOS/Android.
-- [ ] Mobile Cue Panel shows the top 8 cue buttons for one-touch triggering.
-- [ ] Offline service worker caches the app shell.
+- [x] Dashboard installable as a PWA on iOS/Android.
+- [x] Mobile Cue Panel shows the top 8 cue buttons for one-touch triggering.
+- [x] Offline service worker caches the app shell.
 Checks:
-- [ ] `cd control-ui && npm run lint && npm run build`
+- [x] `cd control-ui && npm run lint && npm run build`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-105 Pixel Mapping & DMX Output (IO Engine)
+
+Ticket: SC-105
+Scope: Output video pixels to DMX lighting fixtures (LED strips/panels).
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/io/artnet_sender.py`
+- `render-node/app/mapping/pixel_mapper.py`
+Acceptance:
+- [ ] Render Node samples specific UV coordinates from the compositor buffer.
+- [ ] Orchestrator sends sampled colors over ArtNet to external fixtures.
+- [ ] Supports minimum 10 universes at >30fps.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-106 Multi-Channel Audio Playback Engine
+
+Ticket: SC-106
+Scope: Precision audio routing and playback synced with timeline.
+Owner: lead-agent
+Files allowed:
+- `render-node/app/audio_engine.py`
+- `shared-protocol/messages.v1.json`
+Acceptance:
+- [ ] Support up to 16 channels of ASIO / CoreAudio output.
+- [ ] Sub-frame lock between audio playhead and WebGPU flip via the Precision Scheduler.
+Checks:
+- [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-107 AI Generative Stems (Audio-Reactive)
+
+Ticket: SC-107
+Scope: AI visual layers react dynamically to incoming audio FFT.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/layers/generative_ai.py`
+- `render-node/app/audio_analysis.py`
+Acceptance:
+- [ ] Extract real-time frequency bands (Kick, Snare, Highs) from system audio.
+- [ ] Pass FFT data as uniform buffers to the Generative AI layer and standard Effects.
+- [ ] Visuals pulse/react to the beat reliably.
+Checks:
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-108 3D Pre-Viz Stage Simulator (Next.js)
+
+Ticket: SC-108
+Scope: Live 3D viewing of the stage logic without physical hardware.
+Owner: lead-agent
+Files allowed:
+- `control-ui/components/stage-previz.tsx`
+- `control-ui/package.json`
+Acceptance:
+- [ ] Integrate `react-three-fiber`.
+- [ ] Represent projector outputs and bounding boxes in a basic 3D room.
+- [ ] Stream WebRTC low-res textures onto the 3D screens for live pre-vis.
+Checks:
+- [ ] `cd control-ui && npm run build`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-109 System Archiving & Show Packaging
+
+Ticket: SC-109
+Scope: Export and import total show configurations including gigabytes of assets.
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/services/archiver.py`
+- `orchestration-server/app/main.py`
+Acceptance:
+- [ ] One-click export to a `.stage` compressed tarball containing SQLite DB + all assets.
+- [ ] Show import overwrites current registry cleanly.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 Deliverable:
 - [ ] branch + handoff note

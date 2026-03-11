@@ -384,3 +384,17 @@ class LTCSetModeRequest(BaseModel):
             ]
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# SC-109 — System Archiving
+# ---------------------------------------------------------------------------
+
+ArchiveJobStatus = Literal["QUEUED", "RUNNING", "DONE", "FAILED"]
+
+class ArchiveJobResponse(BaseModel):
+    job_id: str
+    type: Literal["export", "import"]
+    status: ArchiveJobStatus
+    archive_url: str | None = None
+    error_message: str | None = None
