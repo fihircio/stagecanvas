@@ -41,6 +41,7 @@ class EffectsCapturingBridge(RendererBridge):
     async def ping(self) -> None: pass
     async def tick(self, snapshot: dict) -> None: pass
     async def close(self) -> None: pass
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None: pass
 
     async def update_layers(self, layers: list[dict[str, Any]]) -> None:
         self.captured_layers.append(layers)

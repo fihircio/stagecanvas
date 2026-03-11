@@ -352,6 +352,8 @@ class NodeState:
                 await self.bridge.ping()
             elif name == "update_layers":
                 await self.bridge.update_layers(args["layers"])
+            elif name == "hot_swap":
+                await self.bridge.hot_swap(args["layer_id"], args["payload"])
             history["detail"] = "applied"
         except Exception as exc:
             history["status"] = "error"

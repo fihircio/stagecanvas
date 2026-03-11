@@ -7,10 +7,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from .config import PROTOCOL_VERSION
 
 NodeStatus = Literal["IDLE", "LOADING", "READY", "PLAYING", "PAUSED", "ERROR"]
-CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"]
+CommandType = Literal["LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING", "UPDATE_LAYERS", "HOT_SWAP"]
 ProtocolVersion = Literal["v1"]
 TimeSyncSource = Literal["system", "ntp", "ptp"]
-MediaAssetStatus = Literal["REGISTERED", "INGESTING", "READY", "FAILED"]
+MediaAssetStatus = Literal["REGISTERED", "INGESTING", "READY", "FAILED", "MISSING"]
 TranscodeJobStatus = Literal["QUEUED", "RUNNING", "DONE", "FAILED"]
 SUPPORTED_CODEC_PROFILES: dict[str, str] = {
     "HAP": "HAP",

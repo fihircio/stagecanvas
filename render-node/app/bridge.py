@@ -4,7 +4,7 @@ import asyncio
 from contextlib import suppress
 import json
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
 
 
 class RendererBridge(ABC):
@@ -33,6 +33,9 @@ class RendererBridge(ABC):
     async def update_layers(self, layers: list[dict[str, Any]]) -> None: ...
 
     @abstractmethod
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None: ...
+
+    @abstractmethod
     async def ping(self) -> None: ...
 
     @abstractmethod
@@ -50,6 +53,9 @@ class Decoder(ABC):
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None: ...
 
     @abstractmethod
+    async def get_next_frame(self, media_id: str) -> Optional[tuple[bytes, float]]: ...
+
+    @abstractmethod
     async def close(self) -> None: ...
 
 
@@ -59,6 +65,9 @@ class NullDecoder(Decoder):
 
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:
         return
+
+    async def get_next_frame(self, media_id: str) -> Optional[tuple[bytes, float]]:
+        return None
 
     async def close(self) -> None:
         return
@@ -87,6 +96,9 @@ class NullRendererBridge(RendererBridge):
         return
 
     async def update_layers(self, layers: list[dict[str, Any]]) -> None:
+        return
+
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
         return
 
     async def ping(self) -> None:
@@ -135,6 +147,9 @@ class MockUnityBridge(RendererBridge):
 
     async def update_layers(self, layers: list[dict[str, Any]]) -> None:
         await self._emit({"event": "update_layers", "layers": layers})
+
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
+        await self._emit({"event": "hot_swap", "layer_id": layer_id, "payload": payload})
 
     async def ping(self) -> None:
         await self._emit({"event": "ping"})

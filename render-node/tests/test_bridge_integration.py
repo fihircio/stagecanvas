@@ -43,6 +43,9 @@ class RecordingBridge(RendererBridge):
     async def close(self) -> None:
         return
 
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
+        self.calls.append(("hot_swap", {"layer_id": layer_id, "payload": payload}))
+
 
 class FaultyBridge(RecordingBridge):
     async def play_at(self, show_id: str, target_time_ms: int | None, payload: dict[str, Any]) -> None:

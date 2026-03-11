@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import unittest
-from typing import Any
+from typing import Any, Optional
 
 from app.bridge import Decoder
 from app.state import NodeState
@@ -20,6 +20,9 @@ class RecordingDecoder(Decoder):
 
     async def close(self) -> None:
         return
+
+    async def get_next_frame(self, media_id: str) -> Optional[tuple[bytes, float]]:
+        return None
 
 
 class FailingDecoder(RecordingDecoder):

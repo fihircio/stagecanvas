@@ -17,6 +17,7 @@ dependencies = [
   "python-multipart",
   "python-jose[cryptography]",
   "passlib[bcrypt]",
+  "watchdog>=4.0.0",
 ]
 
 [build-system]

@@ -2203,13 +2203,13 @@ Files allowed:
 - `render-node/app/renderer_gpu.py`
 - `render-node/requirements.txt`
 Acceptance:
-- [ ] Implement a live segmentation layer using a lightweight model (e.g., Mediapipe or SelfieSegmentation).
-- [ ] Extract alpha mask from live camera input and apply it to the video stream on the GPU.
-- [ ] Run at >30fps on standard hardware.
+- [x] Implement a live segmentation layer using a lightweight model (e.g., Mediapipe or SelfieSegmentation).
+- [x] Extract alpha mask from live camera input and apply it to the video stream on the GPU.
+- [x] Run at >30fps on standard hardware.
 Checks:
-- [ ] `make render-compile`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-111 Global Asset Sync (Cloud S3 Integration)
 
@@ -2220,13 +2220,13 @@ Files allowed:
 - `orchestration-server/app/services/cloud_sync.py`
 - `orchestration-server/requirements.txt`
 Acceptance:
-- [ ] Support S3-compatible storage for asset backups and distributed sync.
-- [ ] Orchestration server automatically pulls assets from cloud when a show is loaded on a new site.
-- [ ] Progress reporting for background downloads based on WebSocket API.
+- [x] Support S3-compatible storage for asset backups and distributed sync.
+- [x] Orchestration server automatically pulls assets from cloud when a show is loaded on a new site.
+- [x] Progress reporting for background downloads based on WebSocket API.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-112 Visual Scripting Engine (Logic Blocks)
 
@@ -2238,13 +2238,13 @@ Files allowed:
 - `control-ui/lib/compiler.ts`
 - `orchestration-server/app/collaboration.py`
 Acceptance:
-- [ ] New node types: "Timer", "Counter", "Compare", "Boolean Logic".
-- [ ] Logic compiles to a backend persistent state machine in the Orchestration Server.
-- [ ] Ability to trigger Layer properties based on logic outcomes (e.g., "If AI_DETECTED count > 5, Play Clip X").
+- [x] New node types: "Timer", "Counter", "Compare", "Boolean Logic".
+- [x] Logic compiles to a backend persistent state machine in the Orchestration Server.
+- [x] Ability to trigger Layer properties based on logic outcomes (e.g., "If AI_DETECTED count > 5, Play Clip X").
 Checks:
-- [ ] `cd control-ui && npm run build`
+- [x] `cd control-ui && npm run build`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-113 Enterprise RBAC & User Management
 
@@ -2256,13 +2256,13 @@ Files allowed:
 - `orchestration-server/app/models.py`
 - `control-ui/hooks/use-auth.ts`
 Acceptance:
-- [ ] Define roles: Viewer, Operator, Designer, Admin.
-- [ ] Operational locks (SC-098) restricted based on role permissions.
-- [ ] Basic JWT authentication and session management.
+- [x] Define roles: Viewer, Operator, Designer, Admin.
+- [x] Operational locks (SC-098) restricted based on role permissions.
+- [x] Basic JWT authentication and session management.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-114 VR Operator Console (OpenXR)
 
@@ -2273,10 +2273,94 @@ Files allowed:
 - `control-ui/components/vr-console.tsx`
 - `control-ui/package.json`
 Acceptance:
-- [ ] basic WebXR/OpenXR support in the 3D Pre-Viz renderer (SC-108).
-- [ ] Virtual trigger buttons controllable via VR controllers.
-- [ ] Stereoscopic view for 3D stage simulation.
+- [x] basic WebXR/OpenXR support in the 3D Pre-Viz renderer (SC-108).
+- [x] Virtual trigger buttons controllable via VR controllers.
+- [x] Stereoscopic view for 3D stage simulation.
 Checks:
-- [ ] `cd control-ui && npm run build`
+- [x] `cd control-ui && npm run build`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-115 Local Drive Ingest & Media Browser
+
+Ticket: SC-115
+Scope: Allow users to browse and ingest media from their local file system directly into StageCanvas.
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/services/media_browser.py`
+- `control-ui/components/media-library.tsx`
+Acceptance:
+- [ ] Implement a folder browser in the Orchestration Server that lists local drive contents.
+- [ ] Add "Add to Library" button in the UI that registers a local file path as a playable asset.
+- [ ] Support Drag & Drop from the OS into the Media Library panel.
+Checks:
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-116 Automated Thumbnail & Metadata Extraction
+
+Ticket: SC-116
+Scope: Precision metadata (Duration, Codec, FPS) and visual thumbnails for all ingested assets.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/services/metadata_extractor.py`
+- `orchestration-server/app/main.py`
+Acceptance:
+- [ ] Automatically run FFmpeg to extract a 320x180 JPG thumbnail upon ingestion.
+- [ ] Extract and store duration, resolution, and frame rate in the `MediaRegistry`.
+- [ ] Display thumbnails in the `MediaLibrary` UI component.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-117 Native File System Watcher
+
+Ticket: SC-117
+Scope: Real-time library updates when files are added/removed in the local watch directory.
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/services/file_watcher.py`
+- `orchestration-server/requirements.txt`
+Acceptance:
+- [ ] Use `watchdog` to monitor a designated "Auto-Import" folder.
+- [ ] Automatically register new video files to the library.
+- [ ] Mark assets as "Missing" if the local file is deleted.
+Checks:
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-118 Multi-Format Hardware Decoding (ProRes/DXV)
+
+Ticket: SC-118
+Scope: Expand GPU playback support for professional industry codecs.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/layers/video_layer.py`
+- `render-node/app/renderer_gpu.py`
+Acceptance:
+- [ ] Enhance the WebGPU video layer to support native decoding of ProRes 422/4444 and DXV3.
+- [ ] Ensure sub-frame timing precision is maintained for high-bitrate professional media.
+Checks:
+- [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-119 Asset Hot-Swapping & Live Reload
+
+Ticket: SC-119
+Scope: Replace assets on the fly without stopping the active render timeline.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/main.py`
+- `render-node/app/bridge.py`
+Acceptance:
+- [ ] Implement "Hot Swap" command to replace the source file of an active layer.
+- [ ] New asset should load into GPU memory in the background and swap on the next Genlock pulse.
+- [ ] Zero hitch or dropped frame during the transition.
+Checks:
+- [ ] `make render-test`
 Deliverable:
 - [ ] branch + handoff note

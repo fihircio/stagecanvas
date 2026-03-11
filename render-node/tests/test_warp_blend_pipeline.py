@@ -44,6 +44,9 @@ class RecordingBridge(RendererBridge):
     async def close(self) -> None:
         self.events.append(("close", {}))
 
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
+        self.events.append(("hot_swap", {"layer_id": layer_id, "payload": payload}))
+
 
 class FailingMappingBridge(RecordingBridge):
     async def set_mapping(self, mapping_config: dict[str, Any]) -> None:

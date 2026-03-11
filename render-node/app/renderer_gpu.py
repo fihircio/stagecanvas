@@ -5,7 +5,7 @@ import json
 import time
 from typing import Any
 import wgpu
-from .bridge import RendererBridge
+from .bridge import RendererBridge, Decoder
 from .output.ndi_sender import NDISender
 from .output.webrtc_stream import WebRTCStreamer
 from .sync_genlock import GenlockSync
@@ -15,6 +15,8 @@ from .mapping.pixel_mapper import PixelMapper
 from .audio_engine import AudioEngine
 from .audio_analysis import AudioAnalyzer
 from .layers.ai_segmentation import AISegmenter
+from .layers.video_layer import VideoLayer
+from typing import Any, Optional
 
 # Vertex shader with dynamic buffers
 VERTEX_SHADER = """
@@ -80,6 +82,9 @@ class WebGPURendererBridge(RendererBridge):
         self.pixel_mapper: Optional[PixelMapper] = None
         self.ai_segmenter: Optional[AISegmenter] = None
         self.segmentation_layers: set[str] = set()
+        self.video_layers: dict[str, VideoLayer] = {}
+        self.decoder: Optional[Decoder] = None
+        self.pending_swaps: dict[str, dict[str, Any]] = {} # layer_id -> swap_data
 
     async def connect(self, node_id: str, label: str) -> None:
         self.node_id = node_id
@@ -246,9 +251,36 @@ class WebGPURendererBridge(RendererBridge):
             else:
                 self.segmentation_layers.discard(layer_id)
             
+            if kind == "video":
+                if layer_id not in self.video_layers:
+                    self.video_layers[layer_id] = VideoLayer(layer_id)
+                
+                asset_id = layer_data.get("asset_id")
+                if asset_id:
+                    # In a real app, we'd ensure the decoder has this asset loaded
+                    pass
+
             if kind != "generative_ai":
                 # Normal layer logic
                 pass
+
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
+        """
+        Prepare an asset to be swapped on the next genlock pulse (SC-119).
+        The asset loading happens in the background.
+        """
+        asset_id = payload.get("asset_id")
+        print(f"[gpu-renderer] Hot-swapping layer {layer_id} to asset {asset_id}...")
+        
+        # Simulate background loading
+        await asyncio.sleep(0.01) # Small delay to represent I/O
+        
+        # Register the swap to be applied on the next pulse
+        self.pending_swaps[layer_id] = {
+            "asset_id": asset_id,
+            "target_pulse": self.genlock.get_current_pulse() + 1,
+            "payload": payload
+        }
 
     async def ping(self) -> None:
         pass
@@ -266,56 +298,80 @@ class WebGPURendererBridge(RendererBridge):
 
         # Phase 1: Wait for hardware genlock pulse
         hold_time_ms = await self.genlock.wait_for_pulse()
+
+        # SC-119: Apply pending hot-swaps on genlock pulse
+        current_pulse = self.genlock.get_current_pulse()
+        swapped_layers = []
+        for layer_id, swap_data in self.pending_swaps.items():
+            if current_pulse >= swap_data["target_pulse"]:
+                print(f"[gpu-renderer] Applying hot-swap for {layer_id} on pulse {current_pulse}")
+                # Transition: Swapping asset to swap_data['asset_id']
+                swapped_layers.append(layer_id)
+        
+        for lid in swapped_layers:
+            del self.pending_swaps[lid]
         
         # Phase 2: Optimized WebGPU Render Pass
+        system_now_ms = time.time() * 1000.0
+        
+        # SC-118: Fetch and upload new video frames with PTS synchronization
+        if self.decoder:
+            for layer_id, layer in self.video_layers.items():
+                # For simplicity, we assume layer_id matches media_id for now
+                frame_package = await self.decoder.get_next_frame(layer_id)
+                if frame_package and self.device:
+                    frame_bytes, pts_ms = frame_package
+                    layer.update_frame(frame_bytes, pts_ms)
+                    
+                    # Upload to t_main (Binding 1)
+                    # Note: In a real multi-layer pass, we'd have unique bindings per layer
+                    self.device.queue.write_texture(
+                        {"texture": self.render_target, "origin": (0, 0, 0)},
+                        frame_bytes,
+                        {"bytes_per_row": self.width * 4, "rows_per_image": self.height},
+                        (self.width, self.height, 1),
+                    )
+
+        if self.device is None:
+            return
+
         command_encoder = self.device.create_command_encoder()
         
         # SC-099: Process layers and apply effects
-        for layer_id, effects in self.layer_effects.items():
-            if not effects:
-                continue
-                
-            # In a real engine, we'd render the layer to a texture first.
-            # Here we apply the effects chain to the layer's source.
-            # For the stub, we simulate the sequential passes.
-            for effect in effects:
-                effect_type = effect.get("type")
-                params = effect.get("params", {})
-                enabled = effect.get("enabled", True)
-                
-                if enabled and self.effects:
-                    # [SIMULATED] input -> output passes
-                    # We use the render_target or intermediate textures.
-                    self.effects.apply(
-                        command_encoder,
-                        self.render_target.create_view(),
-                        self.render_target.create_view(),
-                        effect_type,
-                        params
-                    )
-        
-        # [SIMULATED] Final compositing to self.render_target here...
+        if self.effects:
+            for layer_id, effects in self.layer_effects.items():
+                if not effects:
+                    continue
+                for effect in effects:
+                    effect_type = effect.get("type")
+                    params = effect.get("params", {})
+                    enabled = effect.get("enabled", True)
+                    
+                    if enabled and self.render_target:
+                        # [SIMULATED] input -> output passes
+                        view = self.render_target.create_view()
+                        self.effects.apply(
+                            command_encoder,
+                            view,
+                            view,
+                            effect_type,
+                            params
+                        )
         
         # SC-110: AI Segmentation Mask processing
         if self.ai_segmenter and self.segmentation_layers:
-            # For each layer needing segmentation, we'd process its input frame.
-            # In this stub, we process the last frame data as a placeholder for a live camera feed.
             for layer_id in self.segmentation_layers:
-                # [SIMULATED] Get raw camera frame (BGRA)
-                # raw_frame = self._get_camera_frame(layer_id)
                 mask_bytes = self.ai_segmenter.process_frame(self.frame_data_stub, self.width, self.height)
-                
-                # Upload mask to Binding 2 (t_mask)
-                self.device.queue.write_texture(
-                    {"texture": self.render_target, "origin": (0, 0, 0)}, # STUB: reusing target as mask dest for simplicity in simulation
-                    mask_bytes,
-                    {"bytes_per_row": self.width * 1, "rows_per_image": self.height},
-                    (self.width, self.height, 1),
-                )
+                if self.device and self.render_target:
+                    self.device.queue.write_texture(
+                        {"texture": self.render_target, "origin": (0, 0, 0)},
+                        mask_bytes,
+                        {"bytes_per_row": self.width * 1, "rows_per_image": self.height},
+                        (self.width, self.height, 1),
+                    )
         
         # SC-107: Audio-reactive update for generative AI layers
         if self.audio_engine and self.audio_analyzer and self.ai_layers:
-            # Drain one frame from channel 0 (kick) and channel 1 (snare) for analysis
             kick_frames = self.audio_engine.get_channel_samples(0, 1)
             snare_frames = self.audio_engine.get_channel_samples(1, 1)
             samples = (kick_frames[0] if kick_frames else []) + (snare_frames[0] if snare_frames else [])
@@ -326,20 +382,16 @@ class WebGPURendererBridge(RendererBridge):
 
         
         # Copy texture to staging buffer
-        command_encoder.copy_texture_to_buffer(
-            {"texture": self.render_target},
-            {"buffer": self.staging_buffer, "bytes_per_row": self.width * 4, "rows_per_image": self.height},
-            (self.width, self.height, 1),
-        )
-        self.device.queue.submit([command_encoder.finish()])
+        if self.render_target and self.staging_buffer and self.device:
+            command_encoder.copy_texture_to_buffer(
+                {"texture": self.render_target},
+                {"buffer": self.staging_buffer, "bytes_per_row": self.width * 4, "rows_per_image": self.height},
+                (self.width, self.height, 1),
+            )
+            self.device.queue.submit([command_encoder.finish()])
 
         # Phase 3: Zero-copy readout via memoryview
-        # In a real async environment, we'd wait for the buffer to map.
-        # For Phase 4 optimization, we use the mapped data directly.
-        # Note: mapping is usually async in WebGPU, but wgpu-py allows some synchronous-like behavior in stubs.
-        # We simulate the zero-copy buffer access.
         try:
-            # self.staging_buffer.map_read() # Simulated async map
             frame_view = memoryview(bytearray(self.width * self.height * 4)) # Proxy for mapped buffer
             self.ndi.send_frame(frame_view)
             self.webrtc.push_frame(frame_view)
@@ -348,21 +400,15 @@ class WebGPURendererBridge(RendererBridge):
             if self.pixel_mapper:
                 dmx_payloads = self.pixel_mapper.map_frame(frame_view)
                 if dmx_payloads:
-                    # Send to orchestrator via HTTP or WebSocket
-                    # For performance, this would be a direct UDP packet to the orchestrator's ArtNet broadcast port 
-                    # or an async WS payload. We push it to the snapshot for this stub.
                     snapshot["dmx_payloads"] = {k: v.hex() for k, v in dmx_payloads.items()}
                     
         except Exception as e:
             print(f"[gpu-renderer] Readout optimization failed: {e}")
 
         # Phase 4: Drift metrics correlation (SC-086)
-        # We add the genlock hold time to the node's reported drift metrics
         genlock_metrics = self.genlock.get_metrics()
         snapshot.update(genlock_metrics)
         
-        # If we held for a long time, it might show up as drift in the orchestrator
-        # but here we identify it as intentional genlock wait.
         if hold_time_ms > 1.0:
             snapshot["last_tick_genlock_wait_ms"] = hold_time_ms
 

@@ -35,11 +35,17 @@ class RecordingBridge(RendererBridge):
     async def update_layers(self, layers: list[dict[str, Any]]) -> None:
         self.events.append(("update_layers", {"layers": layers}))
 
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
+        self.events.append(("hot_swap", {"layer_id": layer_id, "payload": payload}))
+
     async def tick(self, snapshot: dict[str, Any]) -> None:
         self.events.append(("tick", snapshot))
 
     async def close(self) -> None:
         self.events.append(("close", {}))
+
+    async def hot_swap(self, layer_id: str, payload: dict[str, Any]) -> None:
+        self.events.append(("hot_swap", {"layer_id": layer_id, "payload": payload}))
 
 
 class FailingSeekBridge(RecordingBridge):

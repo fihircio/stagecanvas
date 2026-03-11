@@ -117,3 +117,36 @@ export type TranscodeJobSnapshot = {
   created_at_ms: number;
   updated_at_ms: number;
 };
+
+export type MediaAsset = {
+  asset_id: string;
+  label: string;
+  codec_profile: string;
+  duration_ms: number;
+  size_bytes: number;
+  checksum: string;
+  uri: string;
+  status: "REGISTERED" | "INGESTING" | "READY" | "FAILED" | "MISSING";
+  metadata?: {
+    codec?: string;
+    width?: number;
+    height?: number;
+    fps?: number;
+    bitrate_bps?: number;
+  };
+};
+
+export type BrowserEntry = {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  mtime: number;
+};
+
+export type BrowserListResponse = {
+  path: string;
+  parent: string | null;
+  entries: BrowserEntry[];
+  error?: string;
+};

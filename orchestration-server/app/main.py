@@ -70,7 +70,9 @@ from .services.transcoder import TranscodeWorker
 from .services.archiver import ArchiverService
 from .services.cloud_sync import CloudSyncService
 from .io.ltc_reader import LTCReader, LTCSyncMode
-from .auth import get_current_user, require_role
+from .metadata_extractor import MetadataExtractor
+from .media_browser import MediaBrowser
+from .services.file_watcher import FileWatcherService
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
 app = FastAPI(
@@ -79,7 +81,12 @@ app = FastAPI(
 logger = logging.getLogger("orchestration")
 registry = NodeRegistry()
 MEDIA_STORAGE_DIR = Path(__file__).resolve().parent.parent / "data" / "media"
+THUMBNAIL_STORAGE_DIR = Path(__file__).resolve().parent.parent / "data" / "thumbnails"
 RENDER_CACHE_DIR = Path(__file__).resolve().parents[2] / "render-node" / "data" / "cache"
+
+MEDIA_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+THUMBNAIL_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+RENDER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 media_registry = MediaRegistry(Path(__file__).resolve().parent.parent / "data" / "media_registry.json")
 transcode_queue = TranscodeQueue()
 transfer_worker = AssetTransferWorker(
@@ -161,6 +168,7 @@ async def _fire_trigger_internal(rule: TriggerRule, fire_payload: dict[str, Any]
     else:
         await execute()
 cloud_sync: CloudSyncService | None = None
+file_watcher: FileWatcherService | None = None
 
 class NodeDiscoveryListener(ServiceListener):
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
@@ -217,11 +225,15 @@ async def _transfer_loop() -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
-    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service, cloud_sync
+    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service, cloud_sync, file_watcher
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
 
     DATA_DIR = Path(__file__).resolve().parent.parent / "data"
     archiver_service = ArchiverService(DATA_DIR)
+    
+    AUTO_IMPORT_DIR = DATA_DIR / "auto_import"
+    file_watcher = FileWatcherService(AUTO_IMPORT_DIR, media_registry)
+    file_watcher.start(asyncio.get_running_loop())
     
     # [MOVED TO MODULE LEVEL] logic_state, _fire_trigger_internal
 
@@ -350,7 +362,9 @@ async def _startup() -> None:
 @app.on_event("shutdown")
 async def _shutdown() -> None:
     global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
-    global cloud_sync
+    global cloud_sync, file_watcher
+    if file_watcher:
+        file_watcher.stop()
     task = getattr(app.state, "transfer_task", None)
     if task is not None:
         task.cancel()
@@ -415,6 +429,55 @@ async def node_heartbeat(node_id: str, body: HeartbeatRequest) -> dict[str, Any]
 async def list_nodes() -> dict[str, Any]:
     """List all registered render nodes and their status."""
     return {"nodes": await registry.list_nodes()}
+
+
+# ---------------------------------------------------------------------------
+# SC-115 MEDIA BROWSER ENDPOINTS
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/browser/list", tags=["media"], dependencies=[Depends(require_role(["admin", "designer"]))])
+async def browser_list_directory(path: str = str(Path.home())) -> dict[str, Any]:
+    """Securely list files and folders on the local system."""
+    return MediaBrowser.list_directory(path)
+
+@app.get("/api/v1/media/thumbnails/{asset_id}", tags=["media"])
+async def get_media_thumbnail(asset_id: str):
+    """Serve the generated thumbnail for a media asset."""
+    thumb_path = THUMBNAIL_STORAGE_DIR / f"{asset_id}.jpg"
+    if not thumb_path.exists():
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    return FileResponse(thumb_path, media_type="image/jpeg")
+
+@app.post("/api/v1/media/ingest_local", tags=["media"], dependencies=[Depends(require_role(["admin"]))])
+async def ingest_local_file(path: str, asset_id: Optional[str] = None, label: Optional[str] = None) -> dict[str, Any]:
+    """Ingest a file already present on the local disk."""
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        raise HTTPException(status_code=400, detail="Invalid file path")
+        
+    actual_asset_id = asset_id or hashlib.md5(str(p).encode()).hexdigest()[:12]
+    
+    # Extract metadata
+    meta = MetadataExtractor.get_metadata(str(p))
+    
+    # Generate thumbnail
+    thumb_path = THUMBNAIL_STORAGE_DIR / f"{actual_asset_id}.jpg"
+    MetadataExtractor.generate_thumbnail(str(p), str(thumb_path))
+    
+    # Register in registry
+    request = MediaAssetCreateRequest(
+        asset_id=actual_asset_id,
+        label=label or p.name,
+        codec_profile="generic", # Could be refined
+        duration_ms=meta.get("duration_ms", 0),
+        size_bytes=meta.get("size_bytes", p.stat().st_size),
+        checksum="local-ingest", 
+        uri=f"file://{p.resolve()}",
+        status="READY",
+    )
+    
+    record, is_new, idempotent = await media_registry.register(request)
+    return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "metadata": meta}
 
 
 @app.get("/api/v1/nodes/{node_id}/drift_history", tags=["nodes"])
@@ -640,12 +703,18 @@ async def upload_media_asset(request: Request) -> dict[str, object]:
         handle.write(file_bytes)
 
     checksum = hasher.hexdigest()
+    
+    # SC-116: Extract metadata and generate thumbnail
+    meta = MetadataExtractor.get_metadata(str(target_path))
+    thumb_path = THUMBNAIL_STORAGE_DIR / f"{asset_id}.jpg"
+    MetadataExtractor.generate_thumbnail(str(target_path), str(thumb_path))
+    
     try:
         request = MediaAssetCreateRequest(
             asset_id=asset_id,
             label=label or safe_name,
             codec_profile=codec_profile,
-            duration_ms=max(0, int(duration_ms_raw)),
+            duration_ms=meta.get("duration_ms", int(duration_ms_raw) or 0),
             size_bytes=size_bytes,
             checksum=checksum,
             uri=f"file://{target_path}",
@@ -1195,6 +1264,30 @@ async def operator_seek(body: OperatorCommandRequest) -> dict[str, object]:
     target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
     command_ledger.finalize_request("operator_seek", body.request_id, result)
+    return result
+
+
+@app.post("/api/v1/operators/hot_swap", dependencies=[Depends(require_role(["operator"]))])
+async def operator_hot_swap(body: OperatorCommandRequest) -> dict[str, object]:
+    """Replace an active layer's source asset on the fly (SC-119)."""
+    replay = _idempotent_begin_or_raise(
+        scope="operator_hot_swap",
+        request_id=body.request_id,
+        payload=body.model_dump(mode="json", exclude_none=True),
+    )
+    if replay is not None:
+        return replay
+
+    command = ControlCommand(
+        version=PROTOCOL_VERSION,
+        command="HOT_SWAP",
+        payload=body.payload,
+        seq=command_ledger.next_seq(),
+        origin="operator",
+    )
+    target_ids = body.node_ids or await registry.active_node_ids()
+    result = await _dispatch_to_nodes(command, target_ids)
+    command_ledger.finalize_request("operator_hot_swap", body.request_id, result)
     return result
 
 
