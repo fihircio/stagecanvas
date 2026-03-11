@@ -18,6 +18,7 @@ from .decoder_webcodecs import WebCodecsDecoder
 from .output.webrtc_stream import WebRTCStreamer
 from .sync_genlock import GenlockSync
 from .state import CommandType, NodeState
+from .discovery import HeartbeatDiscovery
 
 SUPPORTED_COMMANDS: set[str] = {"LOAD_SHOW", "PLAY_AT", "PAUSE", "SEEK", "STOP", "PING"}
 
@@ -103,6 +104,7 @@ class RenderNodeAgent:
         self.genlock = GenlockSync()
         self.webrtc = WebRTCStreamer()
         self.webrtc_port = webrtc_port
+        self.discovery = HeartbeatDiscovery(node_id=node_id, label=label)
         self.state = NodeState(node_id=node_id, label=label, bridge=self.bridge, decoder=self.decoder, genlock=self.genlock)
         self.time_sync_source = time_sync_source
         self._time_sync_clock = TimeSyncClock.from_source(time_sync_source, time_sync_offset_ms)
@@ -410,6 +412,7 @@ class RenderNodeAgent:
     async def run(self) -> None:
         await self.bridge.connect(self.node_id, self.label)
         self.webrtc.start()
+        self.discovery.register()
         await self.register_with_retry()
         if self._stop_event.is_set():
             return
@@ -443,6 +446,7 @@ class RenderNodeAgent:
 
     async def close(self) -> None:
         self._stop_event.set()
+        self.discovery.unregister()
         await self._client.aclose()
         await self.bridge.close()
         await self.decoder.close()

@@ -8,6 +8,7 @@ import type {
   PreviewImageEntry,
   PreviewImageResponse,
   TimelineSnapshot,
+  TranscodeJobSnapshot,
 } from "../lib/types";
 
 type OperatorSnapshotMessage = {
@@ -16,6 +17,7 @@ type OperatorSnapshotMessage = {
   drift_slo?: DriftSloSnapshot;
   play_at_min_lead_ms?: number;
   nodes: NodeSnapshot[];
+  transcode_jobs?: TranscodeJobSnapshot[];
 };
 
 type SocketStatus = "connecting" | "connected" | "reconnecting" | "disconnected" | "error";
@@ -84,6 +86,8 @@ export function NodesDashboard() {
   const [protocolVersion, setProtocolVersion] = useState("v1");
   const [playAtLeadMs, setPlayAtLeadMs] = useState(1500);
   const [serverDriftSlo, setServerDriftSlo] = useState<DriftSloSnapshot | null>(null);
+  const [minPlayAtLeadMs, setMinPlayAtLeadMs] = useState<number>(100);
+  const [transcodeJobs, setTranscodeJobs] = useState<TranscodeJobSnapshot[]>([]);
   const [previewTab, setPreviewTab] = useState("combined");
   const [timelineSnapshot, setTimelineSnapshot] = useState<TimelineSnapshot | null>(null);
   const [previewSnapshots, setPreviewSnapshots] = useState<Record<string, PreviewSnapshotEntry>>({});
@@ -334,7 +338,7 @@ export function NodesDashboard() {
       "/api/v1/shows/play_at",
       {
         show_id: showId,
-        target_time_ms: now + Math.max(3000, playAtLeadMs),
+        target_time_ms: now + Math.max(minPlayAtLeadMs, playAtLeadMs),
         payload: {},
         node_ids: targetNodeIds(),
       },
@@ -663,10 +667,11 @@ export function NodesDashboard() {
       ws.onmessage = (event) => {
         const raw = JSON.parse(event.data) as OperatorSnapshotMessage;
         if (raw.type === "NODES_SNAPSHOT") {
-          setNodes(raw.nodes);
+          if (raw.nodes) setNodes(raw.nodes);
           if (raw.protocol_version) setProtocolVersion(raw.protocol_version);
-          if (raw.play_at_min_lead_ms) setPlayAtLeadMs(raw.play_at_min_lead_ms);
           if (raw.drift_slo) setServerDriftSlo(raw.drift_slo);
+          if (raw.play_at_min_lead_ms !== undefined) setMinPlayAtLeadMs(raw.play_at_min_lead_ms);
+          if (raw.transcode_jobs) setTranscodeJobs(raw.transcode_jobs);
         }
       };
 
@@ -1080,6 +1085,20 @@ export function NodesDashboard() {
               CRITICAL {serverDriftSlo?.critical ?? driftLevelCounts.critical}
             </span>
           </div>
+          {transcodeJobs.length > 0 && (
+            <div className="transcode-overview">
+              <div className="section-title">Background Optimization</div>
+              {transcodeJobs.map(job => (
+                <div key={job.job_id} className="transcode-job">
+                  <span className="job-id">{job.asset_id.split('-')[0]}</span>
+                  <span className={`job-status ${job.status.toLowerCase()}`}>{job.status}</span>
+                  <div className="progress-bar-container">
+                    <div className="progress-bar" style={{ width: `${job.progress * 100}%` }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="status-stack">
             {nodes.map((node) => {
               const alertLevel = node.drift_alert_level ?? node.drift_level;
@@ -1095,6 +1114,8 @@ export function NodesDashboard() {
                   <div className="node-metrics">
                     <span>GPU {number(node.metrics.gpu_pct)}%</span>
                     <span>CPU {number(node.metrics.cpu_pct)}%</span>
+                    <span>Temp {number(node.metrics.gpu_temp ?? 0)}°C</span>
+                    <span>VRAM {number(node.metrics.vram_mb ?? 0)}MB</span>
                     <span>Sync {node.drift_level}</span>
                     <span>Alert {alertLevel}</span>
                     <span>Latency {number(node.drift_ms)}ms</span>

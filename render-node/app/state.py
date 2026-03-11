@@ -110,8 +110,10 @@ class NodeState:
     drift_ms: float = 0.0
     dropped_frames: int = 0
     cpu_pct: float = 18.0
-    gpu_pct: float = 26.0
-    fps: float = 60.0
+    gpu_pct: float = 30.0
+    gpu_temp: float = 45.0
+    vram_mb: float = 1200.0
+    fps: float = 0.0
     last_seq: int = 0
     scheduled_play_time_ms: float | None = None
     cache_show_id: str | None = None
@@ -371,7 +373,9 @@ class NodeState:
                 self.position_ms += dt_ms
                 self.fps = 59.7
                 self.cpu_pct = min(65.0, self.cpu_pct + 0.8)
-                self.gpu_pct = min(88.0, self.gpu_pct + 0.9)
+                self.gpu_pct = min(85.0, self.gpu_pct + 1.2)
+                self.gpu_temp = min(82.0, self.gpu_temp + 0.5)
+                self.vram_mb = min(6000.0, self.vram_mb + 50.0)
                 # Drift relative to system clock if we were supposed to start at scheduled_play_time_ms
                 if self.playback_started_ms is not None:
                     expected_position = now_ms - self.playback_started_ms
@@ -387,12 +391,16 @@ class NodeState:
             elif self.status == "PAUSED":
                 self.fps = 0.0
                 self.cpu_pct = max(14.0, self.cpu_pct - 0.5)
-                self.gpu_pct = max(18.0, self.gpu_pct - 0.6)
+                self.gpu_pct = max(15.0, self.gpu_pct - 1.0)
+                self.gpu_temp = max(45.0, self.gpu_temp - 0.2)
+                self.vram_mb = max(1200.0, self.vram_mb - 20.0)
                 self.drift_ms = 0.0
             else:
                 self.fps = 58.8 if self.status == "READY" else 0.0
                 self.cpu_pct = max(10.0, self.cpu_pct - 0.3)
-                self.gpu_pct = max(14.0, self.gpu_pct - 0.4)
+                self.gpu_pct = max(5.0, self.gpu_pct - 0.5)
+                self.gpu_temp = max(38.0, self.gpu_temp - 0.3)
+                self.vram_mb = max(800.0, self.vram_mb - 10.0)
                 self.drift_ms = 0.0
             snapshot = {
                 "status": self.status,
@@ -415,6 +423,8 @@ class NodeState:
                 "metrics": {
                     "cpu_pct": self.cpu_pct,
                     "gpu_pct": self.gpu_pct,
+                    "gpu_temp": self.gpu_temp,
+                    "vram_mb": self.vram_mb,
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
                     "genlock": self.genlock.get_metrics(),
@@ -446,6 +456,8 @@ class NodeState:
                 "metrics": {
                     "cpu_pct": self.cpu_pct,
                     "gpu_pct": self.gpu_pct,
+                    "gpu_temp": self.gpu_temp,
+                    "vram_mb": self.vram_mb,
                     "fps": self.fps,
                     "dropped_frames": self.dropped_frames,
                     "genlock": self.genlock.get_metrics(),

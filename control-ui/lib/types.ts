@@ -16,6 +16,8 @@ export type NodeSnapshot = {
   metrics: {
     cpu_pct: number;
     gpu_pct: number;
+    gpu_temp?: number;
+    vram_mb?: number;
     fps: number;
     dropped_frames: number;
     genlock?: {
@@ -103,4 +105,15 @@ export type PreviewImageResponse = {
   ok: boolean;
   requested_count: number;
   images: PreviewImageEntry[];
+};
+
+export type TranscodeJobSnapshot = {
+  job_id: string;
+  asset_id: string;
+  target_profile: string;
+  status: "QUEUED" | "RUNNING" | "DONE" | "FAILED";
+  progress: number;
+  error_message: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
 };
