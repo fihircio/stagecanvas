@@ -149,11 +149,92 @@ class EffectsChain:
             }
         )
 
-    def apply(self, command_encoder: wgpu.GPUCommandEncoder, input_texture: wgpu.GPUTextureView, output_texture: wgpu.GPUTextureView, effect_type: str, params: Optional[Dict[str, Any]] = None):
+    def apply(
+        self, 
+        command_encoder: wgpu.GPUCommandEncoder, 
+        input_texture: wgpu.GPUTextureView, 
+        output_texture: wgpu.GPUTextureView, 
+        effect_type: str, 
+        params: Optional[Dict[str, Any]] = None
+    ):
         if effect_type not in self.pipelines:
             return
             
-        pipeline = self.pipelines[effect_type]
-        # In a real implementation, we would create bind groups and buffers here.
-        # For the stub, we simulate the pass.
-        pass
+        params = params or {}
+        
+        if effect_type == "color_correction":
+            self._apply_color_correction(command_encoder, input_texture, output_texture, params)
+        elif effect_type == "blur":
+            self._apply_blur(command_encoder, input_texture, output_texture, params)
+        elif effect_type == "lut_3d":
+            self._apply_lut_3d(command_encoder, input_texture, output_texture, params)
+
+    def _apply_color_correction(self, command_encoder, input_texture, output_texture, params):
+        pipeline = self.pipelines["color_correction"]
+        data = [params.get("brightness", 0.0), params.get("contrast", 1.0), params.get("saturation", 1.0), 0.0]
+        import struct
+        buffer = self.device.create_buffer_with_data(data=struct.pack("4f", *data), usage=wgpu.BufferUsage.UNIFORM)
+        sampler = self.device.create_sampler(mag_filter="linear", min_filter="linear")
+        bind_group = self.device.create_bind_group(
+            layout=pipeline.get_bind_group_layout(0),
+            entries=[
+                {"binding": 0, "resource": sampler},
+                {"binding": 1, "resource": input_texture},
+                {"binding": 2, "resource": {"buffer": buffer, "offset": 0, "size": 16}}
+            ]
+        )
+        self._run_pass(command_encoder, pipeline, bind_group, output_texture)
+
+    def _apply_blur(self, command_encoder, input_texture, output_texture, params):
+        pipeline = self.pipelines["blur"]
+        sigma = params.get("sigma", 1.0)
+        
+        # Pass 1: Horizontal
+        # We simulate a scratch texture for the intermediate step.
+        # In production, we'd pre-allocate this.
+        scratch_view = input_texture # Stub: In real app, this would be a separate texture view
+        
+        self._run_blur_pass(command_encoder, pipeline, input_texture, scratch_view, [1.0, 0.0, sigma, 0.0])
+        
+        # Pass 2: Vertical
+        self._run_blur_pass(command_encoder, scratch_view, output_texture, [0.0, 1.0, sigma, 0.0])
+
+    def _run_blur_pass(self, command_encoder, pipeline, in_view, out_view, param_data):
+        import struct
+        buffer = self.device.create_buffer_with_data(data=struct.pack("4f", *param_data), usage=wgpu.BufferUsage.UNIFORM)
+        sampler = self.device.create_sampler(mag_filter="linear", min_filter="linear")
+        bind_group = self.device.create_bind_group(
+            layout=pipeline.get_bind_group_layout(0),
+            entries=[
+                {"binding": 0, "resource": sampler},
+                {"binding": 1, "resource": in_view},
+                {"binding": 2, "resource": {"buffer": buffer, "offset": 0, "size": 16}}
+            ]
+        )
+        self._run_pass(command_encoder, pipeline, bind_group, out_view)
+
+    def _apply_lut_3d(self, command_encoder, input_texture, output_texture, params):
+        pipeline = self.pipelines["lut_3d"]
+        lut_view = params.get("lut_view")
+        if not lut_view:
+            return
+            
+        sampler = self.device.create_sampler(mag_filter="linear", min_filter="linear")
+        bind_group = self.device.create_bind_group(
+            layout=pipeline.get_bind_group_layout(0),
+            entries=[
+                {"binding": 0, "resource": sampler},
+                {"binding": 1, "resource": input_texture},
+                {"binding": 2, "resource": lut_view}
+            ]
+        )
+        self._run_pass(command_encoder, pipeline, bind_group, output_texture)
+
+    def _run_pass(self, command_encoder, pipeline, bind_group, target_view):
+        render_pass = command_encoder.begin_render_pass(
+            color_attachments=[{"view": target_view, "load_op": wgpu.LoadOp.clear, "store_op": wgpu.StoreOp.store}]
+        )
+        render_pass.set_pipeline(pipeline)
+        render_pass.set_bind_group(0, bind_group, [], 0, 0)
+        render_pass.draw(4, 1, 0, 0)
+        render_pass.end()

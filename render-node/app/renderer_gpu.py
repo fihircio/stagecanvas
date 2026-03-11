@@ -10,6 +10,7 @@ from .output.ndi_sender import NDISender
 from .output.webrtc_stream import WebRTCStreamer
 from .sync_genlock import GenlockSync
 from .layers.generative_ai import GenerativeAILayer
+from .effects import EffectsChain
 
 # Vertex shader with dynamic buffers
 VERTEX_SHADER = """
@@ -59,6 +60,8 @@ class WebGPURendererBridge(RendererBridge):
         self.ndi = NDISender()
         self.webrtc = WebRTCStreamer()
         self.genlock = GenlockSync()
+        self.effects: Optional[EffectsChain] = None
+        self.layer_effects: dict[str, list[dict[str, Any]]] = {}
         self.ai_layers: dict[str, GenerativeAILayer] = {}
         self.frame_data_stub = b"\x00" * 1024 # Stub frame data
         self.render_target = None
@@ -86,6 +89,8 @@ class WebGPURendererBridge(RendererBridge):
         
         self.ndi.start()
         self.webrtc.start()
+        
+        self.effects = EffectsChain(self.device)
         
         self.is_connected = True
         print(f"[gpu-renderer] Connected and optimized pipeline initialized.")
@@ -211,7 +216,11 @@ class WebGPURendererBridge(RendererBridge):
                 
                 prompt = layer_data.get("prompt", "")
                 self.ai_layers[layer_id].update_prompt(prompt)
-            else:
+            
+            # SC-099: Store effects for the layer
+            self.layer_effects[layer_id] = layer_data.get("effects", [])
+            
+            if kind != "generative_ai":
                 # Normal layer logic
                 pass
 
@@ -233,11 +242,33 @@ class WebGPURendererBridge(RendererBridge):
         hold_time_ms = await self.genlock.wait_for_pulse()
         
         # Phase 2: Optimized WebGPU Render Pass
-        # In real code, we'd record commands here.
-        # For optimization, we use a staging buffer for readout.
         command_encoder = self.device.create_command_encoder()
         
-        # [SIMULATED] Render to self.render_target here...
+        # SC-099: Process layers and apply effects
+        for layer_id, effects in self.layer_effects.items():
+            if not effects:
+                continue
+                
+            # In a real engine, we'd render the layer to a texture first.
+            # Here we apply the effects chain to the layer's source.
+            # For the stub, we simulate the sequential passes.
+            for effect in effects:
+                effect_type = effect.get("type")
+                params = effect.get("params", {})
+                enabled = effect.get("enabled", True)
+                
+                if enabled and self.effects:
+                    # [SIMULATED] input -> output passes
+                    # We use the render_target or intermediate textures.
+                    self.effects.apply(
+                        command_encoder,
+                        self.render_target.create_view(),
+                        self.render_target.create_view(),
+                        effect_type,
+                        params
+                    )
+        
+        # [SIMULATED] Final compositing to self.render_target here...
         
         # Copy texture to staging buffer
         command_encoder.copy_texture_to_buffer(
