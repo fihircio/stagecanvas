@@ -1,0 +1,26 @@
+{
+    "version": "v1",
+    "mappings": [
+        {
+            "tracker_id": 1,
+            "target_show_id": "main-show",
+            "target_track_id": "track-visuals",
+            "target_layer_id": "layer-tracking-mask",
+            "property_map": {
+                "x": "transform.x",
+                "y": "transform.y",
+                "z": "opacity"
+            },
+            "scaling": {
+                "x": 0.001,
+                "y": 0.001,
+                "z": 1.0
+            },
+            "offset": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            }
+        }
+    ]
+}

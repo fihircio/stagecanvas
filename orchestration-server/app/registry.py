@@ -53,6 +53,8 @@ class NodeRecord:
             "gpu_pct": 0.0,
             "fps": 0.0,
             "dropped_frames": 0,
+            "gpu_temp": 0.0,
+            "vram_mb": 0.0,
         }
     )
     last_seen_ms: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -510,6 +512,7 @@ class TranscodeJobRecord:
     asset_id: str
     target_profile: str
     status: str = "QUEUED"
+    progress: float = 0.0
     error_message: str | None = None
     created_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     updated_at_ms: int = field(default_factory=lambda: int(time.time() * 1000))
@@ -520,6 +523,7 @@ class TranscodeJobRecord:
             asset_id=self.asset_id,
             target_profile=self.target_profile,
             status=self.status,
+            progress=self.progress,
             error_message=self.error_message,
             created_at_ms=self.created_at_ms,
             updated_at_ms=self.updated_at_ms,
@@ -542,17 +546,32 @@ class TranscodeQueue:
         async with self._lock:
             return self._jobs.get(job_id)
 
+    async def get_next_queued(self) -> TranscodeJobRecord | None:
+        async with self._lock:
+            for job in self._jobs.values():
+                if job.status == "QUEUED":
+                    return job
+            return None
+
     async def list_jobs(self) -> list[TranscodeJobResponse]:
         async with self._lock:
             return [job.to_response() for job in self._jobs.values()]
 
-    async def update(self, job_id: str, status: str | None, error_message: str | None) -> TranscodeJobRecord | None:
+    async def update(
+        self, 
+        job_id: str, 
+        status: str | None = None, 
+        progress: float | None = None,
+        error_message: str | None = None
+    ) -> TranscodeJobRecord | None:
         async with self._lock:
             record = self._jobs.get(job_id)
             if record is None:
                 return None
             if status is not None:
                 record.status = status
+            if progress is not None:
+                record.progress = progress
             if error_message is not None:
                 record.error_message = error_message
             record.updated_at_ms = int(time.time() * 1000)

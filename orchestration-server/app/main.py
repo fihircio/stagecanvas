@@ -38,13 +38,16 @@ from .models import (
     TimelineUpsertClipRequest,
     TimelineUpsertShowRequest,
     TimelineUpsertTrackRequest,
+    LockRequest,
 )
 from .command_ledger import CommandLedger
 from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask, TranscodeQueue
 from .timeline_repository import TimelineRepository
+from .collaboration import CollaborationManager
 from .io.osc_server import OSCServer
 from .io.midi_handler import MIDIHandler
 from .io.artnet_server import ArtNetServer, ArtNetToLayerMapper
+from .io.psn_listener import PSNListener
 from .cluster_manager import ClusterManager
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
@@ -69,6 +72,8 @@ osc_server: OSCServer | None = None
 midi_handler: MIDIHandler | None = None
 artnet_server: ArtNetServer | None = None
 cluster_manager: ClusterManager | None = None
+psn_listener: PSNListener | None = None
+collaboration_manager = CollaborationManager()
 
 app.add_middleware(
     CORSMiddleware,
@@ -86,7 +91,7 @@ async def _transfer_loop() -> None:
 
 @app.on_event("startup")
 async def _startup() -> None:
-    global osc_server, midi_handler, artnet_server, cluster_manager
+    global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
     
     # Internal trigger callback for OSC
@@ -135,6 +140,31 @@ async def _startup() -> None:
     artnet_server = ArtNetServer(dmx_callback=artnet_mapper.handle_dmx)
     await artnet_server.start()
 
+    # Spatial Tracking callback for PSN
+    async def psn_tracking_callback(tracker_id: int, coords: dict[str, float]):
+        # Map tracker coordinates to layer properties
+        # For demo, mapping Tracker 1 to a specific layer's X/Y
+        if tracker_id == 1:
+            layers_data = [{
+                "layer_id": "layer-tracking-mask",
+                "kind": "video",
+                "transform": {
+                    "x": coords["x"] * 0.001,
+                    "y": coords["y"] * 0.001
+                }
+            }]
+            cmd = ControlCommand(
+                version=PROTOCOL_VERSION,
+                command="UPDATE_LAYERS",
+                payload={"layers": layers_data},
+                seq=command_ledger.next_seq(),
+                origin="psn",
+            )
+            await broadcast_command(cmd)
+
+    psn_listener = PSNListener(tracking_callback=psn_tracking_callback)
+    await psn_listener.start()
+
     role = os.environ.get("CLUSTER_ROLE", "PRIMARY").upper()
     primary_url = os.environ.get("PRIMARY_URL")
     cluster_manager = ClusterManager(role=role, primary_url=primary_url)
@@ -143,7 +173,7 @@ async def _startup() -> None:
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
-    global osc_server, midi_handler, artnet_server, cluster_manager
+    global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
     task = getattr(app.state, "transfer_task", None)
     if task is not None:
         task.cancel()
@@ -155,6 +185,8 @@ async def _shutdown() -> None:
         midi_handler.stop()
     if artnet_server:
         artnet_server.stop()
+    if psn_listener:
+        psn_listener.stop()
     if cluster_manager:
         await cluster_manager.stop()
 
@@ -941,6 +973,7 @@ async def operator_socket(ws: WebSocket) -> None:
                     "nodes": await registry.list_nodes(),
                     "drift_slo": await registry.drift_summary(),
                     "play_at_min_lead_ms": MIN_PLAY_AT_LEAD_MS,
+                    "locks": collaboration_manager.get_locks(),
                 }
             )
             await asyncio.sleep(1.0)
@@ -1007,3 +1040,20 @@ def _validate_mapping_config_from_payload(payload: dict[str, object]) -> None:
                 "message": f"mapping_config validation failed: {exc}",
             },
         ) from exc
+@app.post("/api/v1/collaboration/lock")
+async def take_lock(body: LockRequest) -> dict[str, object]:
+    success = collaboration_manager.take_lock(body.resource_id, body.user_id)
+    if not success:
+         raise HTTPException(status_code=423, detail="Resource currently locked by another user")
+    return {"ok": True, "locks": collaboration_manager.get_locks()}
+
+
+@app.delete("/api/v1/collaboration/lock")
+async def release_lock(body: LockRequest) -> dict[str, object]:
+    success = collaboration_manager.release_lock(body.resource_id, body.user_id)
+    return {"ok": success, "locks": collaboration_manager.get_locks()}
+
+
+@app.get("/api/v1/collaboration/locks")
+async def list_locks() -> dict[str, object]:
+    return {"ok": True, "locks": collaboration_manager.get_locks()}

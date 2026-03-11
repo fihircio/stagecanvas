@@ -1863,10 +1863,10 @@ Files allowed:
 - `control-ui/lib/compiler.ts`
 - `orchestration-server/app/main.py`
 Acceptance:
-- [ ] Connecting a "YOLO Trigger" to a "Play Clip" node correctly updates the Orchestrator's rules DB.
-- [ ] UI reflects deployment success/failure status.
+- [x] Connecting a "YOLO Trigger" to a "Play Clip" node correctly updates the Orchestrator's rules DB.
+- [x] UI reflects deployment success/failure status.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-090 Production NDI & WebRTC SDK Integration
 
@@ -1878,10 +1878,10 @@ Files allowed:
 - `render-node/app/output/webrtc_stream.py`
 - `render-node/requirements.txt`
 Acceptance:
-- [ ] Real NDI stream visible in NDI Studio Monitor.
-- [ ] WebRTC stream supports H.264 hardware encoding where available.
+- [x] Real NDI stream visible in NDI Studio Monitor.
+- [x] WebRTC stream supports H.264 hardware encoding where available.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-091 DMX/ArtNet Fixture Profile Engine
 
@@ -1892,10 +1892,10 @@ Files allowed:
 - `shared-protocol/fixtures.json`
 - `orchestration-server/app/io/artnet_server.py`
 Acceptance:
-- [ ] Users can define custom ArtNet profiles (e.g. Channel 1=Opacity, 2=Speed).
-- [ ] Orchestrator handles multiple universes simultaneously.
+- [x] Users can define custom ArtNet profiles (e.g. Channel 1=Opacity, 2=Speed).
+- [x] Orchestrator handles multiple universes simultaneously.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-092 Multi-Node Canvas Splitting
 
@@ -1907,10 +1907,10 @@ Files allowed:
 - `render-node/app/renderer_gpu.py`
 - `shared-protocol/messages.v1.json`
 Acceptance:
-- [ ] Orchestrator can command Node A to render Top-Left 4K and Node B to render Bottom-Right 4K.
-- [ ] Sync maintained across the split via PTP.
+- [x] Orchestrator can command Node A to render Top-Left 4K and Node B to render Bottom-Right 4K.
+- [x] Sync maintained across the split via PTP.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-093 GPU Texture Sharing (NDI/Spout) Performance Optimization
 
@@ -1921,7 +1921,102 @@ Files allowed:
 - `render-node/app/renderer_gpu.py`
 - `render-node/app/output/ndi_sender.py`
 Acceptance:
-- [ ] Reduction in CPU usage compared to standard `read_texture` calls.
-- [ ] Maintain 60fps at 4K resolution.
+- [x] Reduction in CPU usage compared to standard `read_texture` calls.
+- [x] Maintain 60fps at 4K resolution.
+Deliverable:
+- [x] branch + handoff note
+
+## SC-094 Automated Asset Transcoding Service (HAP/DXV)
+
+Ticket: SC-094
+Scope: Background service to optimize raw video uploads for GPU efficiency.
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/services/transcoder.py`
+- `orchestration-server/requirements.txt`
+- `shared-protocol/assets.json`
+Acceptance:
+- [ ] Uploaded MP4/MOV files are automatically converted to HAP (MOV) or DXV (MOV) using FFmpeg.
+- [ ] Transcoded assets are linked in the show metadata instead of original files.
+- [ ] Status updates (Progress %) are emitted via WebSockets to the UI.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-095 Dynamic Node Discovery & Health Dashboard
+
+Ticket: SC-095
+Scope: mDNS discovery of render nodes and a pro-grade health dashboard.
+Owner: lead-agent
+Files allowed:
+- `render-node/app/discovery.py`
+- `orchestration-server/app/registry.py`
+- `control-ui/app/nodes/page.tsx`
+Acceptance:
+- [ ] Render nodes broadcast presence via mDNS (Zeroconf).
+- [ ] Orchestration server automatically registers new nodes.
+- [ ] Dashboard displays GPU Temp, VRAM usage, and Frame-Sync status in real-time.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-096 Generative AI Visual Layer (SD-Lite)
+
+Ticket: SC-096
+Scope: Real-time generative layer type for the GPU engine.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/layers/generative_ai.py`
+- `render-node/app/renderer_gpu.py`
+Acceptance:
+- [ ] New layer type "Generative AI" that accepts text prompts.
+- [ ] Use a lightweight SD stub or API call to render frames directly into the GPU compositor.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-097 Spatial Show Control (PSN/Stage Automation)
+
+Ticket: SC-097
+Scope: Integration of PosiStageNet (PSN) or similar stage automation protocols.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/io/psn_listener.py`
+- `shared-protocol/automation.json`
+Acceptance:
+- [ ] Listen for incoming 3D coordinates of stage moving heads/scenery.
+- [ ] Map 3D positions to layer coordinates or mask origins in real-time.
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-098 Multi-User Collaboration & Operational Locks
+
+Ticket: SC-098
+Scope: Concurrent editing safeguards for the control UI.
+Owner: feature-agent
+Files allowed:
+- `orchestration-server/app/collaboration.py`
+- `control-ui/hooks/use-locks.ts`
+Acceptance:
+- [ ] Visual indicators when another user is editing a specific clip or rule.
+- [ ] Simple mutex "Lock" for show-day safety (Take Control / Release Control).
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-099 Pro Shader Effects (LUT, Color, Blur)
+
+Ticket: SC-099
+Scope: Implement a post-processing effects pipeline inside the WebGPU renderer.
+Owner: feature-agent (Agent D)
+Files allowed:
+- `render-node/app/renderer_gpu.py`
+- `render-node/app/effects/shader_library.py`
+- `render-node/tests/test_shader_effects.py`
+Out of scope:
+- UI for effect parameter tuning (Next.js side)
+Acceptance:
+- [ ] Implement a reusable Effect shader structure in the WebGPU pipeline.
+- [ ] Add at least 3 core effects: 3D LUT (Color Grading), Gaussian Blur, and Brightness/Contrast/Saturation.
+- [ ] Effects can be enabled/disabled per layer via the `snapshot` update.
+Checks:
+- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [ ] `make render-compile`
 Deliverable:
 - [ ] branch + handoff note

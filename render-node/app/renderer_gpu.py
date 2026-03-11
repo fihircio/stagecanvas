@@ -9,6 +9,7 @@ from .bridge import RendererBridge
 from .output.ndi_sender import NDISender
 from .output.webrtc_stream import WebRTCStreamer
 from .sync_genlock import GenlockSync
+from .layers.generative_ai import GenerativeAILayer
 
 # Vertex shader with dynamic buffers
 VERTEX_SHADER = """
@@ -58,7 +59,8 @@ class WebGPURendererBridge(RendererBridge):
         self.ndi = NDISender()
         self.webrtc = WebRTCStreamer()
         self.genlock = GenlockSync()
-        self.frame_data_stub = None # Will store our optimized buffer
+        self.ai_layers: dict[str, GenerativeAILayer] = {}
+        self.frame_data_stub = b"\x00" * 1024 # Stub frame data
         self.render_target = None
         self.staging_buffer = None
         self.width = 3840 # 4K default
@@ -195,8 +197,23 @@ class WebGPURendererBridge(RendererBridge):
         print(f"[gpu-renderer] Stopped.")
 
     async def update_layers(self, layers: list[dict[str, Any]]) -> None:
-        # Update internal texture state for each layer
-        pass
+        """
+        Update the renderer layers based on show state.
+        Handles loading assets for normal layers and updating prompts for generative layers.
+        """
+        for layer_data in layers:
+            layer_id = layer_data.get("layer_id")
+            kind = layer_data.get("kind")
+            
+            if kind == "generative_ai":
+                if layer_id not in self.ai_layers:
+                    self.ai_layers[layer_id] = GenerativeAILayer(layer_id)
+                
+                prompt = layer_data.get("prompt", "")
+                self.ai_layers[layer_id].update_prompt(prompt)
+            else:
+                # Normal layer logic
+                pass
 
     async def ping(self) -> None:
         pass

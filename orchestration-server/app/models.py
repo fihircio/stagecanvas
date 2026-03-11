@@ -283,6 +283,7 @@ class TranscodeJobResponse(BaseModel):
     asset_id: str
     target_profile: str
     status: TranscodeJobStatus
+    progress: float = 0.0
     error_message: str | None
     created_at_ms: int
     updated_at_ms: int
@@ -346,3 +347,6 @@ class PreviewImageRequest(BaseModel):
     show_id: str | None = None
     width: int = Field(default=320, ge=1)
     height: int = Field(default=180, ge=1)
+class LockRequest(BaseModel):
+    resource_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
