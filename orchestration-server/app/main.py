@@ -130,15 +130,16 @@ async def _transfer_loop() -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
+    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
-    
+
+    DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+    archiver_service = ArchiverService(DATA_DIR)
+
     # Internal trigger callback for OSC
     async def osc_trigger_callback(payload: dict):
         # We simulate firing the trigger internally
         body = TriggerFireRequest(**payload)
-        
-    global artnet_sender
-    artnet_sender = ArtNetSender()
         rule = trigger_rules.get(body.rule_id)
         if rule is not None:
             event = TriggerEvent(
@@ -152,7 +153,9 @@ async def _startup() -> None:
             trigger_events.append(event)
             if len(trigger_events) > TRIGGER_EVENT_LIMIT:
                 del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
-                
+
+    artnet_sender = ArtNetSender()
+
     osc_port = int(os.environ.get("OSC_PORT", 8000))
     osc_server = OSCServer(host="0.0.0.0", port=osc_port, trigger_callback=osc_trigger_callback)
     await osc_server.start()
@@ -214,11 +217,6 @@ async def _startup() -> None:
     # Transcoder
     async def transcode_progress_callback(job_id: str, progress: float):
         await transcode_queue.update(job_id, progress=progress)
-
-    global transcode_worker, cluster_manager, zeroconf, ltc_reader, archiver_service
-    
-    DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-    archiver_service = ArchiverService(DATA_DIR)
 
     timeline_repo.init_db()
     transcode_worker = TranscodeWorker(
