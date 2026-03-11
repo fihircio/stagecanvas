@@ -2374,14 +2374,14 @@ Files allowed:
 - `render-node/app/mapping/edge_blend.py`
 - `render-node/app/renderer_gpu.py`
 Acceptance:
-- [ ] Implement a Gaussian or Bezier-based edge blend shader in the WebGPU pipeline.
-- [ ] Blend curve and width must be adjustable via the snapshot API.
-- [ ] Verified zero visible seams in a 25% overlap configuration.
+- [x] Implement a Gaussian or Bezier-based edge blend shader in the WebGPU pipeline.
+- [x] Blend curve and width must be adjustable via the snapshot API.
+- [x] Verified zero visible seams in a 25% overlap configuration.
 Checks:
-- [ ] `make render-compile`
-- [ ] `make render-test`
+- [x] `make render-compile`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-121 MIDI / OSC Learning & Mapping UI
 
@@ -2392,13 +2392,13 @@ Files allowed:
 - `orchestration-server/app/io/midi_osc_mapper.py`
 - `control-ui/components/mapping-modal.tsx`
 Acceptance:
-- [ ] "Learn" button in UI that waits for incoming MIDI CC or OSC message.
-- [ ] Successfully binds a hardware knob to a Layer opacity/transform property.
-- [ ] Persistent mapping configuration saved in `orchestration.db`.
+- [x] "Learn" button in UI that waits for incoming MIDI CC or OSC message.
+- [x] Successfully binds a hardware knob to a Layer opacity/transform property.
+- [x] Persistent mapping configuration saved in `orchestration.db`.
 Checks:
-- [ ] `make sanity`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-122 Global Timeline Master Pane
 
@@ -2409,13 +2409,13 @@ Files allowed:
 - `control-ui/components/master-timeline.tsx`
 - `control-ui/app/designer/page.tsx`
 Acceptance:
-- [ ] Zoomable and scrollable timeline showing all active layers.
-- [ ] Drag & Drop support for moving media assets onto the timeline.
-- [ ] Visual indication of Genlock/Timecode sync status on the playhead.
+- [x] Zoomable and scrollable timeline showing all active layers.
+- [x] Drag & Drop support for moving media assets onto the timeline.
+- [x] Visual indication of Genlock/Timecode sync status on the playhead.
 Checks:
-- [ ] `cd control-ui && npm run build`
+- [x] `cd control-ui && npm run build`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-123 NDI 5 Discovery & Metadata Bridge
 
@@ -2426,13 +2426,13 @@ Files allowed:
 - `render-node/app/output/ndi_sender.py`
 - `render-node/requirements.txt`
 Acceptance:
-- [ ] Replace NDI stubs with actual NDI 5 SDK native calls.
-- [ ] Support NDI metadata (Tally, Source Names, Connection Status).
-- [ ] Discoverable via mDNS with custom StageCanvas naming conventions.
+- [x] Replace NDI stubs with actual NDI 5 SDK native calls.
+- [x] Support NDI metadata (Tally, Source Names, Connection Status).
+- [x] Discoverable via mDNS with custom StageCanvas naming conventions.
 Checks:
-- [ ] `make render-test`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-124 Show Operations Logging & Diagnostics
 
@@ -2443,10 +2443,113 @@ Files allowed:
 - `orchestration-server/app/services/logger.py`
 - `orchestration-server/app/main.py`
 Acceptance:
-- [ ] Logs every cue fire, hot-swap, and PTP drift event with millisecond precision.
-- [ ] "Export Logs" button in UI (CSV/JSON).
-- [ ] Real-time "Log Terminal" view in the Operator Dashboard.
+- [x] Logs every cue fire, hot-swap, and PTP drift event with millisecond precision.
+- [x] "Export Logs" button in UI (CSV/JSON).
+- [x] Real-time "Log Terminal" view in the Operator Dashboard.
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-125 Real Timeline Scheduler (Frame-Tick Loop)
+
+Ticket: SC-125
+Scope: Implement the core deterministic frame tick loop in the orchestration server.
+Owner: lead-agent
+Priority: CRITICAL — blocks all playback features
+Files allowed:
+- `orchestration-server/app/engine/timeline_scheduler.py`
+- `orchestration-server/app/main.py`
+Acceptance:
+- [ ] A `TimelineScheduler` class that ticks at a target frame rate (60fps) using a high-precision `perf_counter` loop.
+- [ ] At each tick, evaluates the current playhead position against active clips and fires `PLAY_CLIP` commands to render nodes.
+- [ ] Transport controls: `play`, `pause`, `stop`, `seek` — all updating the scheduler state correctly.
+- [ ] Tested with a simulated 60-second show.
 Checks:
 - [ ] `python -m unittest discover -s orchestration-server/tests`
+- [ ] `make sanity`
 Deliverable:
 - [ ] branch + handoff note
+
+## SC-126 Video Layer & WebCodecs Decoder
+
+Ticket: SC-126
+Scope: Decode real video files to GPU texture for playback.
+Owner: feature-agent
+Priority: CRITICAL — blocks visual output
+Files allowed:
+- `render-node/app/layers/video_layer.py`
+- `render-node/app/renderer_gpu.py`
+- `render-node/requirements.txt`
+Acceptance:
+- [ ] A `VideoLayer` that opens a video file using `PyAV` and decodes frames.
+- [ ] Each decoded frame is uploaded as a GPU texture via `wgpu`.
+- [ ] Playback respects the target frame rate and PTS timestamps.
+- [ ] Supports: MP4/H.264, MOV, HAP-encoded `.mov`.
+Checks:
+- [ ] `make render-test`
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-127 Layer Compositor (Alpha / Blend / Transform)
+
+Ticket: SC-127
+Scope: Compose multiple video and solid layers into a single output frame.
+Owner: feature-agent
+Priority: CRITICAL — core visual pipeline
+Files allowed:
+- `render-node/app/renderer_gpu.py`
+- `render-node/app/layers/`
+Acceptance:
+- [ ] Compositor processes a stack of layers in Z-order.
+- [ ] Supports blend modes: Normal, Add, Multiply.
+- [ ] Supports per-layer: Opacity, Position (X/Y), Scale, Rotation.
+- [ ] Output frame is a valid BGRA texture ready for display or NDI streaming.
+Checks:
+- [ ] `make render-test`
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-128 Show Runtime Player (Load → Tick → Render)
+
+Ticket: SC-128
+Scope: End-to-end show engine: load a show file and execute it frame by frame.
+Owner: lead-agent
+Priority: CRITICAL — the "First Visual Playback" milestone
+Files allowed:
+- `orchestration-server/app/engine/show_runtime.py`
+- `render-node/app/bridge.py`
+Acceptance:
+- [ ] `ShowRuntime` can load a `show.json` containing scene, layers, and timeline data.
+- [ ] On `play`, it ticks through the timeline, dispatching render commands to connected nodes.
+- [ ] Render nodes correctly receive commands, decode and composite layers, and push output.
+- [ ] Full round trip: Load Show → Press Play → See video on `/monitor` page.
+Checks:
+- [ ] `make sanity`
+- [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-129 First Visual Playback — E2E Integration Test
+
+Ticket: SC-129
+Scope: Validate the full pipeline from media ingest to visible output.
+Owner: feature-agent
+Priority: CRITICAL — proof-of-concept milestone
+Files allowed:
+- `orchestration-server/tests/test_e2e_playback.py`
+- `render-node/tests/test_e2e_compositor.py`
+Acceptance:
+- [ ] Write an automated E2E test that:
+  1. Registers a sample MP4 in the `MediaRegistry`.
+  2. Creates a show with one video layer on a 10-second timeline.
+  3. Calls `POST /api/v1/operators/play` and waits for the render node to tick.
+  4. Asserts that the render node produces valid output frames for at least 5 seconds.
+- [ ] The `/monitor` page in the control UI correctly displays the live WebRTC feed from the render node rendering the video.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests`
+- [ ] `make render-test`
+Deliverable:
+- [ ] branch + handoff note + screen recording attached to walkthrough
