@@ -308,7 +308,6 @@ async def _startup() -> None:
     async def transcode_progress_callback(job_id: str, progress: float):
         await transcode_queue.update(job_id, progress=progress)
 
-    timeline_repo.init_db()
     transcode_worker = TranscodeWorker(
         transcode_queue=transcode_queue,
         media_registry=media_registry,
