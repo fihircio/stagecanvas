@@ -14,6 +14,7 @@ dependencies = [
   "python-rtmidi>=1.5.8",
   "ffmpeg-python>=0.2.0",
   "zeroconf>=0.132.0",
+  "python-multipart",
 ]
 
 [build-system]
