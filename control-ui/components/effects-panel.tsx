@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from 'react';
+import { MappingModal } from './MappingModal';
 
 // --- Types ---
 export interface ColorCorrectionParams {
@@ -34,8 +35,8 @@ function SectionHeader({ title }: { title: string }) {
 }
 
 function SliderRow({
-  label, value, min, max, step, onChange
-}: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
+  label, value, min, max, step, onChange, onLearn
+}: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; onLearn?: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
       <span style={{ width: '90px', fontSize: '12px', color: '#ccc', flexShrink: 0 }}>{label}</span>
@@ -51,6 +52,19 @@ function SliderRow({
       <span style={{ width: '38px', fontSize: '12px', color: '#eee', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
         {value.toFixed(2)}
       </span>
+      {onLearn && (
+        <button 
+          onClick={onLearn} 
+          style={{
+            background: '#333', color: '#aaa', border: '1px solid #444', 
+            borderRadius: '4px', fontSize: '10px', padding: '2px 6px',
+            cursor: 'pointer', marginLeft: '4px'
+          }}
+          title={`Learn mapping for ${label}`}
+        >
+          [L]
+        </button>
+      )}
     </div>
   );
 }
@@ -89,6 +103,7 @@ export function EffectsPanel({ layerId, wsUrl }: EffectsPanelProps) {
   const [selectedLut, setSelectedLut] = useState('None');
 
   const [status, setStatus] = useState<string | null>(null);
+  const [learningProp, setLearningProp] = useState<string | null>(null);
 
   const buildPayload = useCallback(() => {
     const effects: EffectConfig[] = [
@@ -144,6 +159,14 @@ export function EffectsPanel({ layerId, wsUrl }: EffectsPanelProps) {
 
   return (
     <div style={panelStyle}>
+      {learningProp && (
+        <MappingModal 
+          open={true} 
+          onClose={() => setLearningProp(null)} 
+          targetLayerId={layerId} 
+          targetProperty={learningProp} 
+        />
+      )}
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <span style={{ fontSize: '14px', fontWeight: 700, color: '#e0e8ff' }}>🎨 Effects</span>
@@ -155,9 +178,9 @@ export function EffectsPanel({ layerId, wsUrl }: EffectsPanelProps) {
       <Toggle label="Enable" value={ccEnabled} onChange={setCcEnabled} />
       {ccEnabled && (
         <div style={{ opacity: ccEnabled ? 1 : 0.4, pointerEvents: ccEnabled ? 'auto' : 'none' }}>
-          <SliderRow label="Brightness" value={brightness} min={0} max={2} step={0.01} onChange={setBrightness} />
-          <SliderRow label="Contrast"   value={contrast}   min={0} max={2} step={0.01} onChange={setContrast} />
-          <SliderRow label="Saturation" value={saturation} min={0} max={2} step={0.01} onChange={setSaturation} />
+          <SliderRow label="Brightness" value={brightness} min={0} max={2} step={0.01} onChange={setBrightness} onLearn={() => setLearningProp("effects.color_correction.brightness")} />
+          <SliderRow label="Contrast" value={contrast} min={0} max={2} step={0.01} onChange={setContrast} onLearn={() => setLearningProp("effects.color_correction.contrast")} />
+          <SliderRow label="Saturation" value={saturation} min={0} max={2} step={0.01} onChange={setSaturation} onLearn={() => setLearningProp("effects.color_correction.saturation")} />
         </div>
       )}
 

@@ -46,7 +46,10 @@ from .models import (
     LTCStatusResponse,
     LTCSetModeRequest,
     User,
+    User,
     Token,
+    LearnRequest,
+    MappingEntry,
 )
 from .auth import (
     authenticate_user,
@@ -62,6 +65,7 @@ from .timeline_repository import TimelineRepository
 from .collaboration import CollaborationManager
 from .io.osc_server import OSCServer
 from .io.midi_handler import MIDIHandler
+from .io.midi_osc_mapper import MidiOscMapper
 from .io.artnet_server import ArtNetServer, ArtNetToLayerMapper
 from .io.artnet_sender import ArtNetSender
 from .io.psn_listener import PSNListener
@@ -112,6 +116,7 @@ archiver_service: ArchiverService | None = None
 zeroconf: Zeroconf | None = None
 ltc_reader: LTCReader | None = None
 show_logger = ShowLogger(log_dir=str(Path(__file__).resolve().parent.parent / "data" / "logs"))
+midi_osc_mapper: MidiOscMapper | None = None
 
 # SC-112: Stateful logic tracking
 logic_state: dict[str, int] = {}
@@ -228,7 +233,7 @@ async def _transfer_loop() -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
-    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service, cloud_sync, file_watcher
+    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service, cloud_sync, file_watcher, midi_osc_mapper
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
 
     DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -240,12 +245,26 @@ async def _startup() -> None:
     
     # [MOVED TO MODULE LEVEL] logic_state, _fire_trigger_internal
 
+    # MidiOscMapper initialization
+    async def mapper_dispatch(cmd: ControlCommand):
+        target_ids = await registry.active_node_ids()
+        await _dispatch_to_nodes(cmd, target_ids)
+
+    midi_osc_mapper = MidiOscMapper(
+        db_path=DATA_DIR / "orchestration.db",
+        dispatch_callback=mapper_dispatch
+    )
+
     # Internal trigger callback for OSC
     async def osc_trigger_callback(payload: dict):
         body = TriggerFireRequest(**payload)
         rule = trigger_rules.get(body.rule_id)
         if rule is not None:
             await _fire_trigger_internal(rule, body.payload, "osc")
+        if midi_osc_mapper:
+            val = body.payload.get("value", 1.0) if "value" in body.payload else 1.0
+            # For mapping, the raw address is usually the rule_id, so we just use that.
+            await midi_osc_mapper.handle_signal("osc", f"/{body.rule_id}", float(val))
 
     artnet_sender = ArtNetSender()
 
@@ -255,11 +274,11 @@ async def _startup() -> None:
 
     # CC callback for MIDI
     async def midi_cc_callback(control: int, value: int):
-        # We could use this to update node/layer state. 
-        # For now, we print a log to simulate the connection.
         print(f"[main] Received MIDI CC {control} = {value}")
+        if midi_osc_mapper:
+            await midi_osc_mapper.handle_signal("midi_cc", f"cc:{control}", value / 127.0)
 
-    midi_handler = MIDIHandler(trigger_callback=osc_trigger_callback, cc_callback=midi_cc_callback)
+    midi_handler = MIDIHandler(trigger_callback=None, cc_callback=midi_cc_callback)
     midi_handler.start(asyncio.get_running_loop())
 
     # Layer update callback for ArtNet
@@ -1460,6 +1479,25 @@ async def set_ltc_mode(body: LTCSetModeRequest) -> dict[str, Any]:
         "mode": ltc_reader.sync_mode.value,
         "fps": ltc_reader.fps
     }
+
+
+@app.post("/api/v1/io/learn/start", tags=["io"], dependencies=[Depends(require_role(["designer", "admin"]))])
+async def start_learning(body: LearnRequest):
+    if midi_osc_mapper:
+        midi_osc_mapper.start_learning(body.target_layer_id, body.target_property)
+    return {"ok": True}
+
+@app.post("/api/v1/io/learn/stop", tags=["io"], dependencies=[Depends(require_role(["designer", "admin"]))])
+async def stop_learning():
+    if midi_osc_mapper:
+        midi_osc_mapper.stop_learning()
+    return {"ok": True}
+
+@app.get("/api/v1/io/mappings", tags=["io"], response_model=list[MappingEntry])
+async def get_mappings() -> list[MappingEntry]:
+    if midi_osc_mapper:
+        return midi_osc_mapper.get_mappings()
+    return []
 
 
 @app.post("/api/v1/collaboration/lock", tags=["collaboration"], dependencies=[Depends(require_role(["operator"]))])
