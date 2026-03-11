@@ -10,6 +10,10 @@ import type {
   TimelineSnapshot,
   TranscodeJobSnapshot,
 } from "../lib/types";
+import { TimelineMaster } from "./timeline-master";
+import { LogTerminal } from "./log-terminal";
+import { MediaLibrary } from "./MediaLibrary";
+import { auth } from "../lib/auth";
 
 type OperatorSnapshotMessage = {
   type: "NODES_SNAPSHOT";
@@ -119,6 +123,57 @@ export function NodesDashboard() {
   const apiUrl = useMemo(() => {
     return process.env.NEXT_PUBLIC_ORCHESTRATION_HTTP ?? "http://localhost:8010";
   }, []);
+
+  const fetchTimeline = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/timeline/snapshot?show_id=${showId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTimelineSnapshot(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch timeline", err);
+    }
+  }, [apiUrl, showId]);
+
+  useEffect(() => {
+    const timer = setInterval(fetchTimeline, 1000);
+    return () => clearInterval(timer);
+  }, [fetchTimeline]);
+
+  const onDropAssetOnTimeline = async (trackId: string, asset: MediaAsset, ms: number) => {
+    const clipId = `clip-${Date.now()}`;
+    const payload = {
+      label: asset.label,
+      start_ms: Math.round(ms),
+      duration_ms: asset.duration_ms || 5000,
+      kind: asset.metadata?.codec?.includes("audio") ? "audio" : "video",
+      layers: [{
+        layer_id: `layer-${clipId}`,
+        label: asset.label,
+        asset_id: asset.asset_id,
+        opacity: 1.0,
+        blend_mode: "normal",
+        transform: { x: 0, y: 0, scale_x: 1, scale_y: 1 }
+      }]
+    };
+
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/timeline/shows/${showId}/tracks/${trackId}/clips/${clipId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        fetchTimeline();
+      } else {
+        const err = await res.json();
+        alert(`Drop failed: ${err.detail}`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   function makeRequestId(command: string): string {
     const suffix =
@@ -975,19 +1030,7 @@ export function NodesDashboard() {
       <section className="workspace-grid">
         <aside className="media-panel">
           <div className="section-title">Media Library</div>
-          <div className="media-filters">
-            <button className="chip active">All</button>
-            <button className="chip">Video</button>
-            <button className="chip">Audio</button>
-            <button className="chip">Images</button>
-          </div>
-          <div className="media-list">
-            <div className="media-item">Video Clip 1</div>
-            <div className="media-item">Video Clip 2</div>
-            <div className="media-item">Audio 1</div>
-            <div className="media-item">Alpha Track</div>
-            <div className="media-item">Alpha Matte</div>
-          </div>
+          <MediaLibrary />
         </aside>
 
         <main className="preview-panel">
@@ -1067,6 +1110,18 @@ export function NodesDashboard() {
               onChange={(e) => setDriftThresholdMs(e.target.value)}
               placeholder={`drift warn (${serverDriftSlo?.warn_ms ?? 2.0}ms)`}
             />
+          </div>
+
+          <div className="dashboard-footer-pane" style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '400px' }}>
+             <TimelineMaster 
+                snapshot={timelineSnapshot} 
+                onSeek={(ms) => {
+                    setSeekMs(ms.toFixed(0));
+                    onSeek();
+                }}
+                onDropAsset={onDropAssetOnTimeline}
+             />
+             <LogTerminal />
           </div>
         </main>
 

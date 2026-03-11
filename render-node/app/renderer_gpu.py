@@ -109,6 +109,7 @@ class WebGPURendererBridge(RendererBridge):
         self._setup_pipeline()
         self._setup_buffers()
         
+        self.ndi = NDISender(node_id=node_id)
         self.ndi.start()
         self.webrtc.start()
         

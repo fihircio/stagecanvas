@@ -112,17 +112,25 @@ export function MediaLibrary() {
                             flexDirection: 'column'
                         }}
                     >
-                        <div className="thumbnail-wrapper" style={{ 
-                            width: '100%', 
-                            aspectRatio: '16/9', 
-                            background: '#000',
-                            position: 'relative',
-                            overflow: 'hidden'
-                        }}>
+                        <div className="thumbnail-wrapper" 
+                            draggable
+                            onDragStart={(e) => {
+                                e.dataTransfer.setData("application/json", JSON.stringify(asset));
+                                e.dataTransfer.effectAllowed = "copy";
+                            }}
+                            style={{ 
+                                width: '100%', 
+                                aspectRatio: '16/9', 
+                                background: '#000',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                cursor: 'grab'
+                            }}
+                        >
                             <img 
                                 src={`${API_URL}/api/v1/media/thumbnails/${asset.asset_id}`} 
                                 alt={asset.label}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
                                 onError={(e) => { (e.target as HTMLImageElement).src = 'https://placehold.co/320x180/111/444?text=No+Thumb'; }}
                             />
                             <div style={{ 

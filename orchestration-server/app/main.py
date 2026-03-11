@@ -73,6 +73,7 @@ from .io.ltc_reader import LTCReader, LTCSyncMode
 from .metadata_extractor import MetadataExtractor
 from .media_browser import MediaBrowser
 from .services.file_watcher import FileWatcherService
+from .services.logger import ShowLogger
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
 app = FastAPI(
@@ -110,6 +111,7 @@ transcode_worker: TranscodeWorker | None = None
 archiver_service: ArchiverService | None = None
 zeroconf: Zeroconf | None = None
 ltc_reader: LTCReader | None = None
+show_logger = ShowLogger(log_dir=str(Path(__file__).resolve().parent.parent / "data" / "logs"))
 
 # SC-112: Stateful logic tracking
 logic_state: dict[str, int] = {}
@@ -162,6 +164,7 @@ async def _fire_trigger_internal(rule: TriggerRule, fire_payload: dict[str, Any]
         if len(trigger_events) > TRIGGER_EVENT_LIMIT:
             del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
         logger.info(f"[logic] Fired trigger: {rule.rule_id} from {source}")
+        show_logger.log_cue(rule.show_id or "unknown", rule.cue_id or "unknown", full_payload)
 
     if logic and logic.delay_ms:
         asyncio.create_task(execute())
@@ -421,6 +424,12 @@ async def node_heartbeat(node_id: str, body: HeartbeatRequest) -> dict[str, Any]
     record = await registry.heartbeat(node_id, body)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
+    
+    # SC-124: Log drift if exceeding threshold
+    if abs(body.drift_ms) > 2.0:
+        level = "CRITICAL" if abs(body.drift_ms) > 10.0 else "WARN"
+        show_logger.log_drift(node_id, body.drift_ms, level)
+
     return {"ok": True, "node_id": node_id, "status": record.status, "drift_ms": record.drift_ms}
 
 
@@ -1287,6 +1296,14 @@ async def operator_hot_swap(body: OperatorCommandRequest) -> dict[str, object]:
     target_ids = body.node_ids or await registry.active_node_ids()
     result = await _dispatch_to_nodes(command, target_ids)
     command_ledger.finalize_request("operator_hot_swap", body.request_id, result)
+    
+    # SC-124: Log hot-swap
+    show_logger.log_swap(
+        target_ids[0] if target_ids else "ALL", 
+        body.payload.get("layer_id", "unknown"), 
+        body.payload.get("media_id", "unknown")
+    )
+
     return result
 
 
@@ -1460,3 +1477,36 @@ async def release_lock(body: LockRequest) -> dict[str, object]:
 @app.get("/api/v1/collaboration/locks")
 async def list_locks() -> dict[str, object]:
     return {"ok": True, "locks": collaboration_manager.get_locks()}
+@app.get("/api/v1/logs/export", tags=["diagnostics"], dependencies=[Depends(require_role(["admin"]))])
+async def export_logs():
+    """Download the main show operations log file."""
+    log_path = Path(show_logger.log_path)
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail="Log file not found")
+    return FileResponse(log_path, filename="show_operations.log", media_type="text/plain")
+
+@app.get("/api/v1/logs/live", tags=["diagnostics"])
+async def get_live_logs():
+    """Get the last 100 log entries for the live dashboard."""
+    return {"logs": show_logger.get_live_logs()}
+
+@app.websocket("/ws/logs")
+async def websocket_logs(websocket: WebSocket):
+    """Real-time show log stream for the operator dashboard."""
+    await websocket.accept()
+    
+    # Send backlog
+    for entry in show_logger.get_live_logs():
+        await websocket.send_json(entry)
+        
+    queue = asyncio.Queue()
+    show_logger.add_callback(queue.put_nowait)
+    
+    try:
+        while True:
+            entry = await queue.get()
+            await websocket.send_json(entry)
+    except WebSocketDisconnect:
+        show_logger.remove_callback(queue.put_nowait)
+    except Exception:
+        show_logger.remove_callback(queue.put_nowait)
