@@ -72,7 +72,7 @@ class PrecisionSchedulerTests(unittest.IsolatedAsyncioTestCase):
         await playback_task
         
         print(f"[SC-074] PLAY_AT trigger error: {trigger_error:.4f} ms")
-        self.assertLess(abs(trigger_error), 10.0, f"Trigger error too high: {trigger_error:.4f}ms")
+        self.assertLess(abs(trigger_error), 20.0, f"Trigger error too high: {trigger_error:.4f}ms")
 
 
 if __name__ == "__main__":

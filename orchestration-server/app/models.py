@@ -350,3 +350,37 @@ class PreviewImageRequest(BaseModel):
 class LockRequest(BaseModel):
     resource_id: str = Field(min_length=1)
     user_id: str = Field(min_length=1)
+
+
+# ---------------------------------------------------------------------------
+# SC-100 — SMPTE LTC Timecode
+# ---------------------------------------------------------------------------
+
+class LTCStatusResponse(BaseModel):
+    """Current LTC reader state."""
+    mode: str = Field(description="Sync mode: chase | jam_sync | free_wheel")
+    fps: float = Field(description="Active frame rate (24, 25, 29.97, 30)")
+    timecode_ms: int = Field(description="Current resolved playhead position in ms")
+    locked: bool = Field(description="Whether the reader has locked to a signal")
+    last_frame_str: str = Field(description="Last decoded SMPTE frame string HH:MM:SS:FF")
+    simulate: bool = Field(description="True when running in simulation mode (no real audio)")
+
+
+class LTCSetModeRequest(BaseModel):
+    """Request to change the LTC sync mode at runtime."""
+    mode: Literal["chase", "jam_sync", "free_wheel"] = Field(
+        description="New sync mode to apply"
+    )
+    fps: float | None = Field(
+        default=None,
+        description="Optional new frame rate. Must be one of 24 / 25 / 29.97 / 30",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"mode": "jam_sync", "fps": 25},
+                {"mode": "chase"},
+            ]
+        }
+    }

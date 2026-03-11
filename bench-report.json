@@ -1,0 +1,53 @@
+{
+  "benchmark": "gpu_pipeline",
+  "version": "1.0",
+  "timestamp_iso": "2026-03-11T04:39:58Z",
+  "parameters": {
+    "num_frames": 200,
+    "width": 3840,
+    "height": 2160,
+    "num_indices": 4096
+  },
+  "results": {
+    "composite_fps": 412.06,
+    "frame_time": {
+      "mean_ms": 2.4268,
+      "std_ms": 0.9883,
+      "min_ms": 1.5635,
+      "max_ms": 9.0711,
+      "p95_ms": 4.1302
+    },
+    "vertex_pass": {
+      "mean_ms": 0.2084,
+      "std_ms": 0.1108,
+      "min_ms": 0.1514,
+      "max_ms": 0.7985,
+      "p95_ms": 0.4713
+    },
+    "fragment_pass": {
+      "mean_ms": 0.0317,
+      "std_ms": 0.0184,
+      "min_ms": 0.0239,
+      "max_ms": 0.1401,
+      "p95_ms": 0.0721
+    },
+    "texture_readout": {
+      "mean_ms": 1.8915,
+      "std_ms": 0.592,
+      "min_ms": 1.2644,
+      "max_ms": 6.3733,
+      "p95_ms": 2.9849
+    },
+    "ptp_drift": {
+      "mean_ms": 0.247653,
+      "std_ms": 0.142277,
+      "max_ms": 0.499071,
+      "samples": 200
+    }
+  },
+  "regression_thresholds": {
+    "min_fps": 58.0,
+    "max_frame_time_mean_ms": 18.0,
+    "max_ptp_drift_std_ms": 0.15
+  }
+}

@@ -350,6 +350,8 @@ class NodeState:
                 await self.bridge.stop()
             elif name == "ping":
                 await self.bridge.ping()
+            elif name == "update_layers":
+                await self.bridge.update_layers(args["layers"])
             history["detail"] = "applied"
         except Exception as exc:
             history["status"] = "error"

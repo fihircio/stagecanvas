@@ -39,6 +39,8 @@ from .models import (
     TimelineUpsertShowRequest,
     TimelineUpsertTrackRequest,
     LockRequest,
+    LTCStatusResponse,
+    LTCSetModeRequest,
 )
 from .command_ledger import CommandLedger
 from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask, TranscodeQueue
@@ -50,6 +52,7 @@ from .io.artnet_server import ArtNetServer, ArtNetToLayerMapper
 from .io.psn_listener import PSNListener
 from .cluster_manager import ClusterManager
 from .services.transcoder import TranscodeWorker
+from .io.ltc_reader import LTCReader, LTCSyncMode
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
 app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
@@ -76,6 +79,7 @@ artnet_server: ArtNetServer | None = None
 cluster_manager: ClusterManager | None = None
 transcode_worker: TranscodeWorker | None = None
 zeroconf: Zeroconf | None = None
+ltc_reader: LTCReader | None = None
 
 class NodeDiscoveryListener(ServiceListener):
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
@@ -213,6 +217,34 @@ async def _startup() -> None:
     listener = NodeDiscoveryListener()
     browser = ServiceBrowser(zeroconf, "_stagecanvas._tcp.local.", listener)
 
+    # SMPTE LTC Reader (SC-100)
+    async def ltc_timecode_callback(position_ms: int, mode: str) -> None:
+        # CHASE mode: continuously push PLAY_AT to all nodes when LTC ticks
+        # JAM/FREE_WHEEL: only do so on initial lock
+        if mode == "chase":
+            # Throttle: only dispatch every ~100 ms to avoid flooding
+            now = int(time.time() * 1000)
+            last = getattr(app.state, "ltc_last_dispatch_ms", 0)
+            if now - last < 100:
+                return
+            app.state.ltc_last_dispatch_ms = now
+        command = ControlCommand(
+            version=PROTOCOL_VERSION,
+            command="SEEK",
+            payload={"position_ms": position_ms, "source": "ltc", "mode": mode},
+            seq=command_ledger.next_seq(),
+            origin="system",
+        )
+        await broadcast_command(command)
+        logger.info(f"[ltc] dispatched SEEK position_ms={position_ms} mode={mode}")
+
+    ltc_fps = float(os.environ.get("LTC_FPS", "25"))
+    ltc_mode_str = os.environ.get("LTC_MODE", "chase")
+    ltc_mode = LTCSyncMode(ltc_mode_str) if ltc_mode_str in ("chase", "jam_sync", "free_wheel") else LTCSyncMode.CHASE
+    global ltc_reader
+    ltc_reader = LTCReader(fps=ltc_fps, sync_mode=ltc_mode, callback=ltc_timecode_callback, simulate=True)
+    await ltc_reader.start()
+
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
@@ -236,10 +268,12 @@ async def _shutdown() -> None:
         transcode_worker.stop()
     if zeroconf:
         zeroconf.close()
+    if ltc_reader:
+        await ltc_reader.stop()
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
+@app.get("/health", tags=["health"])
+async def health_check() -> dict[str, str]:
     return {"status": "ok", "role": cluster_manager.role if cluster_manager else "unknown"}
 
 
@@ -267,8 +301,9 @@ async def node_heartbeat(node_id: str, body: HeartbeatRequest) -> dict[str, obje
     return {"ok": True, "node_id": node_id, "status": record.status, "drift_ms": record.drift_ms}
 
 
-@app.get("/api/v1/nodes")
-async def list_nodes() -> dict[str, object]:
+@app.get("/api/v1/nodes", tags=["nodes"])
+async def list_nodes() -> list[dict[str, Any]]:
+    """List all registered render nodes and their status."""
     return {"nodes": await registry.list_nodes()}
 
 
@@ -1019,6 +1054,13 @@ async def operator_socket(ws: WebSocket) -> None:
                     "protocol_version": PROTOCOL_VERSION,
                     "nodes": await registry.list_nodes(),
                     "transcode_jobs": [job.model_dump(mode="json") for job in await transcode_queue.list_jobs()],
+                    "ltc_status": {
+                        "mode": ltc_reader.sync_mode.value if ltc_reader else "off",
+                        "fps": ltc_reader.fps if ltc_reader else 0,
+                        "timecode_ms": ltc_reader.timecode_ms if ltc_reader else 0,
+                        "locked": ltc_reader.locked if ltc_reader else False,
+                        "last_frame_str": ltc_reader.last_frame_str if ltc_reader else "00:00:00:00",
+                    } if ltc_reader else None,
                     "drift_slo": await registry.drift_summary(),
                     "play_at_min_lead_ms": MIN_PLAY_AT_LEAD_MS,
                     "locks": collaboration_manager.get_locks(),
@@ -1088,7 +1130,36 @@ def _validate_mapping_config_from_payload(payload: dict[str, object]) -> None:
                 "message": f"mapping_config validation failed: {exc}",
             },
         ) from exc
-@app.post("/api/v1/collaboration/lock")
+@app.get("/api/v1/ltc/status", tags=["io"], response_model=LTCStatusResponse)
+async def get_ltc_status() -> LTCStatusResponse:
+    """Get the current state of the SMPTE LTC reader."""
+    if not ltc_reader:
+        raise HTTPException(status_code=503, detail="LTC Reader not initialized")
+    return LTCStatusResponse(
+        mode=ltc_reader.sync_mode.value,
+        fps=ltc_reader.fps,
+        timecode_ms=ltc_reader.timecode_ms,
+        locked=ltc_reader.locked,
+        last_frame_str=ltc_reader.last_frame_str,
+        simulate=ltc_reader.simulate
+    )
+
+
+@app.post("/api/v1/ltc/mode", tags=["io"], response_model=dict[str, Any])
+async def set_ltc_mode(body: LTCSetModeRequest) -> dict[str, Any]:
+    """Change the LTC sync mode and frame rate at runtime."""
+    if not ltc_reader:
+        raise HTTPException(status_code=503, detail="LTC Reader not initialized")
+    
+    ltc_reader.set_mode(LTCSyncMode(body.mode), fps=body.fps)
+    return {
+        "ok": True,
+        "mode": ltc_reader.sync_mode.value,
+        "fps": ltc_reader.fps
+    }
+
+
+@app.post("/api/v1/collaboration/lock", tags=["collaboration"])
 async def take_lock(body: LockRequest) -> dict[str, object]:
     success = collaboration_manager.take_lock(body.resource_id, body.user_id)
     if not success:

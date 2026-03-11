@@ -1936,11 +1936,11 @@ Files allowed:
 - `orchestration-server/requirements.txt`
 - `shared-protocol/assets.json`
 Acceptance:
-- [ ] Uploaded MP4/MOV files are automatically converted to HAP (MOV) or DXV (MOV) using FFmpeg.
-- [ ] Transcoded assets are linked in the show metadata instead of original files.
-- [ ] Status updates (Progress %) are emitted via WebSockets to the UI.
+- [x] Uploaded MP4/MOV files are automatically converted to HAP (MOV) or DXV (MOV) using FFmpeg.
+- [x] Transcoded assets are linked in the show metadata instead of original files.
+- [x] Status updates (Progress %) are emitted via WebSockets to the UI.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-095 Dynamic Node Discovery & Health Dashboard
 
@@ -1952,11 +1952,11 @@ Files allowed:
 - `orchestration-server/app/registry.py`
 - `control-ui/app/nodes/page.tsx`
 Acceptance:
-- [ ] Render nodes broadcast presence via mDNS (Zeroconf).
-- [ ] Orchestration server automatically registers new nodes.
-- [ ] Dashboard displays GPU Temp, VRAM usage, and Frame-Sync status in real-time.
+- [x] Render nodes broadcast presence via mDNS (Zeroconf).
+- [x] Orchestration server automatically registers new nodes.
+- [x] Dashboard displays GPU Temp, VRAM usage, and Frame-Sync status in real-time.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-096 Generative AI Visual Layer (SD-Lite)
 
@@ -1967,10 +1967,10 @@ Files allowed:
 - `render-node/app/layers/generative_ai.py`
 - `render-node/app/renderer_gpu.py`
 Acceptance:
-- [ ] New layer type "Generative AI" that accepts text prompts.
-- [ ] Use a lightweight SD stub or API call to render frames directly into the GPU compositor.
+- [x] New layer type "Generative AI" that accepts text prompts.
+- [x] Use a lightweight SD stub or API call to render frames directly into the GPU compositor.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-097 Spatial Show Control (PSN/Stage Automation)
 
@@ -1981,10 +1981,10 @@ Files allowed:
 - `orchestration-server/app/io/psn_listener.py`
 - `shared-protocol/automation.json`
 Acceptance:
-- [ ] Listen for incoming 3D coordinates of stage moving heads/scenery.
-- [ ] Map 3D positions to layer coordinates or mask origins in real-time.
+- [x] Listen for incoming 3D coordinates of stage moving heads/scenery.
+- [x] Map 3D positions to layer coordinates or mask origins in real-time.
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-098 Multi-User Collaboration & Operational Locks
 
@@ -1995,10 +1995,10 @@ Files allowed:
 - `orchestration-server/app/collaboration.py`
 - `control-ui/hooks/use-locks.ts`
 Acceptance:
-- [ ] Visual indicators when another user is editing a specific clip or rule.
-- [ ] Simple mutex "Lock" for show-day safety (Take Control / Release Control).
+- [x] Visual indicators when another user is editing a specific clip or rule.
+- [x] Simple mutex "Lock" for show-day safety (Take Control / Release Control).
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-099 Pro Shader Effects (LUT, Color, Blur)
 
@@ -2012,11 +2012,100 @@ Files allowed:
 Out of scope:
 - UI for effect parameter tuning (Next.js side)
 Acceptance:
-- [ ] Implement a reusable Effect shader structure in the WebGPU pipeline.
-- [ ] Add at least 3 core effects: 3D LUT (Color Grading), Gaussian Blur, and Brightness/Contrast/Saturation.
-- [ ] Effects can be enabled/disabled per layer via the `snapshot` update.
+- [x] Implement a reusable Effect shader structure in the WebGPU pipeline.
+- [x] Add at least 3 core effects: 3D LUT (Color Grading), Gaussian Blur, and Brightness/Contrast/Saturation.
+- [x] Effects can be enabled/disabled per layer via the `snapshot` update.
 Checks:
-- [ ] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
-- [ ] `make render-compile`
+- [x] `python -m unittest discover -s render-node/tests -p 'test_*.py'`
+- [x] `make render-compile`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-100 SMPTE Linear Timecode (LTC) Integration
+
+Ticket: SC-100
+Scope: Lock StageCanvas playback to incoming SMPTE LTC timecode.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/io/ltc_reader.py`
+- `orchestration-server/app/main.py`
+- `orchestration-server/tests/test_ltc_reader.py`
+Acceptance:
+- [ ] LTC decoder parses incoming 24/25/29.97/30fps SMPTE audio signal.
+- [ ] Timeline playhead snaps to the incoming timecode with <1 frame error.
+- [ ] Show correctly chases, jams-syncs, and free-wheels when LTC signal is lost.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [ ] `make sanity`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-101 Effects Parameter UI (Next.js)
+
+Ticket: SC-101
+Scope: Build the visual panel in the control UI to tune the Pro Shader Effects.
+Owner: feature-agent
+Files allowed:
+- `control-ui/components/effects-panel.tsx`
+- `control-ui/app/designer/page.tsx`
+- `control-ui/package.json`
+Acceptance:
+- [ ] Sliders and toggles for Color Correction (B/C/S), Blur radius, and LUT selection.
+- [ ] Parameter changes apply in real-time to the affected render layer via the WebSocket API.
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-102 Performance Benchmark Suite
+
+Ticket: SC-102
+Scope: Automated performance regression tests for the render pipeline.
+Owner: feature-agent
+Files allowed:
+- `render-node/benchmarks/bench_gpu_pipeline.py`
+- `Makefile`
+Acceptance:
+- [ ] Benchmarks measure: frames composited/second, shader effect cost (ms per pass), PTP drift standard deviation.
+- [ ] Output formatted as a JSON report for CI comparison.
+- [ ] `make bench` runs cleanly.
+Checks:
+- [ ] `make bench`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-103 Public REST SDK & API Docs
+
+Ticket: SC-103
+Scope: Formalize the Orchestration Server REST API with auto-generated OpenAPI docs.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/main.py`
+- `orchestration-server/app/api/routes_v1.py`
+- `docs/API.md`
+Acceptance:
+- [ ] `/docs` endpoint serves interactive Swagger UI.
+- [ ] All public endpoints have schemas, example payloads, and error codes documented.
+- [ ] `docs/API.md` provides a quick-start guide for third-party integration.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-104 Mobile Operator UI (PWA)
+
+Ticket: SC-104
+Scope: Progressive Web App version of the control dashboard for handheld operation.
+Owner: feature-agent
+Files allowed:
+- `control-ui/manifest.json`
+- `control-ui/app/layout.tsx`
+- `control-ui/components/mobile-cue-panel.tsx`
+Acceptance:
+- [ ] Dashboard installable as a PWA on iOS/Android.
+- [ ] Mobile Cue Panel shows the top 8 cue buttons for one-touch triggering.
+- [ ] Offline service worker caches the app shell.
+Checks:
+- [ ] `cd control-ui && npm run lint && npm run build`
 Deliverable:
 - [ ] branch + handoff note

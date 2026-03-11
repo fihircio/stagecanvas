@@ -1,0 +1,36 @@
+{
+  "name": "StageCanvas Control",
+  "short_name": "StageCanvas",
+  "description": "Professional show control and cue panel for StageCanvas",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "background_color": "#0a0a1a",
+  "theme_color": "#0a0a1a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Cue Panel",
+      "url": "/mobile",
+      "description": "One-touch cue trigger panel"
+    },
+    {
+      "name": "Designer",
+      "url": "/designer",
+      "description": "Node-graph show designer"
+    }
+  ]
+}

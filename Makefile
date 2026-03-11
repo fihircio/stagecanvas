@@ -1,4 +1,4 @@
-.PHONY: sanity sanity-alt check render-test render-compile render-smoke interaction-run
+.PHONY: sanity sanity-alt check render-test render-compile render-smoke interaction-run bench bench-ci
 
 sanity:
 	./scripts/dev-sanity.sh
@@ -23,3 +23,9 @@ render-smoke:
 
 interaction-run:
 	python interaction-engine/app/main.py
+
+bench:
+	python render-node/benchmarks/bench_gpu_pipeline.py --frames 200 --output bench-report.json
+
+bench-ci:
+	python render-node/benchmarks/bench_gpu_pipeline.py --frames 200 --output bench-report.json --ci
