@@ -6,13 +6,14 @@ import hashlib
 import json
 import os
 import time
+from datetime import timedelta
 from typing import Any, Optional, Literal, Union
 from contextlib import suppress
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, UploadFile, File, Depends, status
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -44,7 +45,17 @@ from .models import (
     LockRequest,
     LTCStatusResponse,
     LTCSetModeRequest,
+    User,
+    Token,
 )
+from .auth import (
+    authenticate_user,
+    create_access_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    require_role,
+    FAKE_USERS_DB,
+)
+from fastapi.security import OAuth2PasswordRequestForm
 from .command_ledger import CommandLedger
 from .registry import AssetTransferWorker, MediaRegistry, NodeRegistry, TransferTask, TranscodeQueue
 from .timeline_repository import TimelineRepository
@@ -59,6 +70,7 @@ from .services.transcoder import TranscodeWorker
 from .services.archiver import ArchiverService
 from .services.cloud_sync import CloudSyncService
 from .io.ltc_reader import LTCReader, LTCSyncMode
+from .auth import get_current_user, require_role
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
 app = FastAPI(
@@ -94,6 +106,60 @@ ltc_reader: LTCReader | None = None
 
 # SC-112: Stateful logic tracking
 logic_state: dict[str, int] = {}
+
+async def _fire_trigger_internal(rule: TriggerRule, fire_payload: dict[str, Any], source: str):
+    """Processes a trigger rule with LogicConfig (SC-112)."""
+    logic = rule.logic
+    full_payload = {**rule.payload, **fire_payload}
+    
+    # 1. Condition Check
+    if logic and logic.condition:
+        # Very simple safe eval for "payload.x > 0.5" type strings
+        # In production, use a real expression parser.
+        try:
+            # Mock evaluation: if condition contains 'value >' compare it
+            if ">" in logic.condition:
+                parts = logic.condition.split(">")
+                if len(parts) == 2:
+                    key, val = parts
+                    key = key.replace("payload.", "").strip()
+                    if float(full_payload.get(key, 0)) <= float(val):
+                        return
+        except Exception:
+            logger.warning(f"[logic] Condition evaluation failed for {rule.rule_id}")
+            return
+
+    # 2. Counter Logic
+    if logic and logic.counter_target:
+        current = logic_state.get(rule.rule_id, 0) + 1
+        logic_state[rule.rule_id] = current
+        if current < logic.counter_target:
+            logger.info(f"[logic] Counter {rule.rule_id}: {current}/{logic.counter_target}")
+            return
+        logic_state[rule.rule_id] = 0 # Reset
+
+    # 3. Delay Logic
+    async def execute():
+        if logic and logic.delay_ms:
+            await asyncio.sleep(logic.delay_ms / 1000.0)
+        
+        event = TriggerEvent(
+            event_id=f"evt-{rule.rule_id}-{int(time.time() * 1000)}",
+            rule_id=rule.rule_id,
+            source=source,
+            cue_id=rule.cue_id,
+            payload=full_payload,
+            timestamp_ms=int(time.time() * 1000),
+        )
+        trigger_events.append(event)
+        if len(trigger_events) > TRIGGER_EVENT_LIMIT:
+            del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
+        logger.info(f"[logic] Fired trigger: {rule.rule_id} from {source}")
+
+    if logic and logic.delay_ms:
+        asyncio.create_task(execute())
+    else:
+        await execute()
 cloud_sync: CloudSyncService | None = None
 
 class NodeDiscoveryListener(ServiceListener):
@@ -126,6 +192,22 @@ app.add_middleware(
 )
 
 
+@app.post("/api/v1/auth/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(FAKE_USERS_DB, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 async def _transfer_loop() -> None:
     while True:
         ran = await transfer_worker.run_once()
@@ -140,60 +222,10 @@ async def _startup() -> None:
 
     DATA_DIR = Path(__file__).resolve().parent.parent / "data"
     archiver_service = ArchiverService(DATA_DIR)
+    
+    # [MOVED TO MODULE LEVEL] logic_state, _fire_trigger_internal
 
-    async def _fire_trigger_internal(rule: TriggerRule, fire_payload: dict[str, Any], source: str):
-        """Processes a trigger rule with LogicConfig (SC-112)."""
-        logic = rule.logic
-        full_payload = {**rule.payload, **fire_payload}
-        
-        # 1. Condition Check
-        if logic and logic.condition:
-            # Very simple safe eval for "payload.x > 0.5" type strings
-            # In production, use a real expression parser.
-            try:
-                # Mock evaluation: if condition contains 'value >' compare it
-                if ">" in logic.condition:
-                    key, val = logic.condition.split(">")
-                    key = key.replace("payload.", "").strip()
-                    if float(full_payload.get(key, 0)) <= float(val):
-                        return
-            except:
-                logger.warning(f"[logic] Condition evaluation failed for {rule.rule_id}")
-                return
-
-        # 2. Counter Logic
-        if logic and logic.counter_target:
-            current = logic_state.get(rule.rule_id, 0) + 1
-            logic_state[rule.rule_id] = current
-            if current < logic.counter_target:
-                logger.info(f"[logic] Counter {rule.rule_id}: {current}/{logic.counter_target}")
-                return
-            logic_state[rule.rule_id] = 0 # Reset
-
-        # 3. Delay Logic
-        async def execute():
-            if logic and logic.delay_ms:
-                await asyncio.sleep(logic.delay_ms / 1000.0)
-            
-            event = TriggerEvent(
-                event_id=f"evt-{rule.rule_id}-{int(time.time() * 1000)}",
-                rule_id=rule.rule_id,
-                source=source,
-                cue_id=rule.cue_id,
-                payload=full_payload,
-                timestamp_ms=int(time.time() * 1000),
-            )
-            trigger_events.append(event)
-            if len(trigger_events) > TRIGGER_EVENT_LIMIT:
-                del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
-            logger.info(f"[logic] Fired trigger: {rule.rule_id} from {source}")
-
-        if logic and logic.delay_ms:
-            asyncio.create_task(execute())
-        else:
-            await execute()
-
-    # Re-wrap osc_trigger_callback to use the internal logic handler
+    # Internal trigger callback for OSC
     async def osc_trigger_callback(payload: dict):
         body = TriggerFireRequest(**payload)
         rule = trigger_rules.get(body.rule_id)
@@ -359,7 +391,7 @@ async def cluster_heartbeat() -> dict[str, str]:
     return {"status": "ok", "role": cluster_manager.role if cluster_manager else "unknown"}
 
 
-@app.post("/api/v1/nodes/register")
+@app.post("/api/v1/nodes/register", dependencies=[Depends(require_role(["admin"]))])
 async def register_node(body: RegisterNodeRequest) -> dict[str, object]:
     record = await registry.register(body)
     return {
@@ -394,7 +426,7 @@ async def node_drift_history(node_id: str) -> dict[str, object]:
     return {"node_id": node_id, "history": await registry.get_drift_history(node_id)}
 
 
-@app.post("/api/v1/preview/snapshot", tags=["preview"])
+@app.post("/api/v1/preview/snapshot", tags=["preview"], dependencies=[Depends(require_role(["operator"]))])
 async def preview_snapshot(body: PreviewSnapshotRequest) -> dict[str, object]:
     """Request a snapshot of the current state from render nodes."""
     target_ids = body.node_ids or await registry.active_node_ids()
@@ -427,7 +459,7 @@ async def preview_snapshot(body: PreviewSnapshotRequest) -> dict[str, object]:
     return {"ok": True, "requested_count": len(target_ids), "snapshots": snapshots}
 
 
-@app.post("/api/v1/preview/image", tags=["preview"])
+@app.post("/api/v1/preview/image", tags=["preview"], dependencies=[Depends(require_role(["operator"]))])
 async def preview_image(body: PreviewImageRequest) -> dict[str, object]:
     """Request a preview image from render nodes."""
     target_ids = body.node_ids or await registry.active_node_ids()
@@ -447,7 +479,7 @@ async def preview_image(body: PreviewImageRequest) -> dict[str, object]:
     return {"ok": True, "requested_count": len(target_ids), "images": images}
 
 
-@app.post("/api/v1/media", tags=["media"])
+@app.post("/api/v1/media", tags=["media"], dependencies=[Depends(require_role(["admin"]))])
 async def register_media_asset(body: MediaAssetCreateRequest) -> dict[str, object]:
     """Register a new media asset."""
     record, is_new, idempotent = await media_registry.register(body)
@@ -477,7 +509,7 @@ async def get_media_asset(asset_id: str) -> dict[str, Any]:
     return {"asset": record.to_response().model_dump(mode="json")}
 
 
-@app.patch("/api/v1/media/{asset_id}", tags=["media"])
+@app.patch("/api/v1/media/{asset_id}", tags=["media"], dependencies=[Depends(require_role(["admin"]))])
 async def update_media_asset(asset_id: str, body: MediaAssetUpdateRequest) -> dict[str, Any]:
     """Update metadata for an existing media asset."""
     record = await media_registry.update(asset_id, body)
@@ -486,7 +518,7 @@ async def update_media_asset(asset_id: str, body: MediaAssetUpdateRequest) -> di
     return {"ok": True, "asset": record.to_response().model_dump(mode="json")}
 
 
-@app.post("/api/v1/media/{asset_id}/transcode", tags=["media"])
+@app.post("/api/v1/media/{asset_id}/transcode", tags=["media"], dependencies=[Depends(require_role(["admin"]))])
 async def enqueue_transcode_job(asset_id: str, body: TranscodeJobCreateRequest) -> dict[str, Any]:
     """Enqueue a background transcoding job for a specific asset."""
     record = await media_registry.get(asset_id)
@@ -516,7 +548,7 @@ async def get_transcode_job(job_id: str) -> dict[str, Any]:
 # SC-109 ARCHIVE ENDPOINTS
 # ---------------------------------------------------------------------------
 
-@app.post("/api/v1/archive/export", tags=["archive"])
+@app.post("/api/v1/archive/export", tags=["archive"], dependencies=[Depends(require_role(["admin"]))])
 async def start_archive_export() -> dict[str, Any]:
     """Start bundling the current show into a portable .stage archive."""
     if archiver_service is None:
@@ -525,7 +557,7 @@ async def start_archive_export() -> dict[str, Any]:
     return {"ok": True, "job_id": job_id}
 
 
-@app.post("/api/v1/archive/import", tags=["archive"])
+@app.post("/api/v1/archive/import", tags=["archive"], dependencies=[Depends(require_role(["admin"]))])
 async def start_archive_import(file: UploadFile = File(...)) -> dict[str, Any]:
     """Upload a .stage archive to replace the current session state."""
     if archiver_service is None:
@@ -572,7 +604,7 @@ async def update_transcode_job(job_id: str, body: TranscodeJobUpdateRequest) -> 
     return {"ok": True, "job": job.to_response().model_dump(mode="json")}
 
 
-@app.post("/api/v1/media/upload")
+@app.post("/api/v1/media/upload", dependencies=[Depends(require_role(["admin"]))])
 async def upload_media_asset(request: Request) -> dict[str, object]:
     content_type = request.headers.get("content-type", "")
     if "multipart/form-data" not in content_type:
@@ -638,7 +670,7 @@ async def upload_media_asset(request: Request) -> dict[str, object]:
     return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "idempotent": not is_new}
 
 
-@app.post("/api/v1/triggers/register", tags=["io"])
+@app.post("/api/v1/triggers/register", tags=["io"], dependencies=[Depends(require_role(["designer"]))])
 async def register_trigger_rule(body: TriggerRegisterRequest) -> dict[str, Any]:
     """Register a new external trigger rule (OSC, MIDI, or ArtNet)."""
     rule = TriggerRule(
@@ -659,7 +691,7 @@ async def list_trigger_rules() -> dict[str, Any]:
     return {"rules": [rule.model_dump(mode="json") for rule in trigger_rules.values()]}
 
 
-@app.post("/api/v1/triggers/fire", tags=["io"])
+@app.post("/api/v1/triggers/fire", tags=["io"], dependencies=[Depends(require_role(["operator"]))])
 async def fire_trigger(body: TriggerFireRequest) -> dict[str, Any]:
     """Manually fire a trigger rule."""
     rule = trigger_rules.get(body.rule_id)
@@ -686,7 +718,7 @@ from pydantic import BaseModel
 class DMXBroadcastRequest(BaseModel):
     dmx_payloads: dict[str, str]
 
-@app.post("/api/v1/io/dmx/broadcast", tags=["io"])
+@app.post("/api/v1/io/dmx/broadcast", tags=["io"], dependencies=[Depends(require_role(["operator"]))])
 async def broadcast_dmx(body: DMXBroadcastRequest) -> dict[str, Any]:
     """Broadcast raw DMX data (universes with hex-encoded byte payloads) over ArtNet."""
     if not artnet_sender:
@@ -732,7 +764,7 @@ async def timeline_list_shows() -> list[TimelineShowSummary]:
     return timeline_repo.list_shows()
 
 
-@app.put("/api/v1/timeline/shows/{show_id}")
+@app.put("/api/v1/timeline/shows/{show_id}", dependencies=[Depends(require_role(["designer"]))])
 async def timeline_upsert_show(show_id: str, body: TimelineUpsertShowRequest) -> dict[str, object]:
     mapping_payload = None
     if body.mapping_config is not None:
@@ -742,7 +774,7 @@ async def timeline_upsert_show(show_id: str, body: TimelineUpsertShowRequest) ->
     return {"ok": True, "show_id": show_id}
 
 
-@app.delete("/api/v1/timeline/shows/{show_id}")
+@app.delete("/api/v1/timeline/shows/{show_id}", dependencies=[Depends(require_role(["designer"]))])
 async def timeline_delete_show(show_id: str) -> dict[str, object]:
     try:
         timeline_repo.delete_show(show_id)
@@ -751,7 +783,7 @@ async def timeline_delete_show(show_id: str) -> dict[str, object]:
     return {"ok": True, "show_id": show_id}
 
 
-@app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}")
+@app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}", dependencies=[Depends(require_role(["designer"]))])
 async def timeline_upsert_track(show_id: str, track_id: str, body: TimelineUpsertTrackRequest) -> dict[str, object]:
     try:
         position = body.order if body.order is not None else body.position
@@ -767,7 +799,7 @@ async def timeline_upsert_track(show_id: str, track_id: str, body: TimelineUpser
     return {"ok": True, "show_id": show_id, "track_id": track_id}
 
 
-@app.delete("/api/v1/timeline/shows/{show_id}/tracks/{track_id}")
+@app.delete("/api/v1/timeline/shows/{show_id}/tracks/{track_id}", dependencies=[Depends(require_role(["designer"]))])
 async def timeline_delete_track(show_id: str, track_id: str) -> dict[str, object]:
     try:
         timeline_repo.delete_track(show_id=show_id, track_id=track_id)
@@ -776,7 +808,7 @@ async def timeline_delete_track(show_id: str, track_id: str) -> dict[str, object
     return {"ok": True, "show_id": show_id, "track_id": track_id}
 
 
-@app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}")
+@app.put("/api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}", dependencies=[Depends(require_role(["designer"]))])
 async def timeline_upsert_clip(
     show_id: str,
     track_id: str,
@@ -802,7 +834,7 @@ async def timeline_upsert_clip(
     return {"ok": True, "show_id": show_id, "track_id": track_id, "clip_id": clip_id}
 
 
-@app.delete("/api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}")
+@app.delete("/api/v1/timeline/shows/{show_id}/tracks/{track_id}/clips/{clip_id}", dependencies=[Depends(require_role(["designer"]))])
 async def timeline_delete_clip(show_id: str, track_id: str, clip_id: str) -> dict[str, object]:
     try:
         timeline_repo.delete_clip(show_id=show_id, track_id=track_id, clip_id=clip_id)
@@ -1063,7 +1095,7 @@ async def transfer_assets(body: AssetTransferRequest) -> dict[str, object]:
     return response
 
 
-@app.post("/api/v1/operators/pause")
+@app.post("/api/v1/operators/pause", dependencies=[Depends(require_role(["operator"]))])
 async def operator_pause(body: OperatorCommandRequest) -> dict[str, object]:
     replay = _idempotent_begin_or_raise(
         scope="operator_pause",
@@ -1086,7 +1118,7 @@ async def operator_pause(body: OperatorCommandRequest) -> dict[str, object]:
     return result
 
 
-@app.post("/api/v1/operators/stop")
+@app.post("/api/v1/operators/stop", dependencies=[Depends(require_role(["operator"]))])
 async def operator_stop(body: OperatorCommandRequest) -> dict[str, object]:
     replay = _idempotent_begin_or_raise(
         scope="operator_stop",
@@ -1109,7 +1141,7 @@ async def operator_stop(body: OperatorCommandRequest) -> dict[str, object]:
     return result
 
 
-@app.post("/api/v1/operators/load_show")
+@app.post("/api/v1/operators/load_show", dependencies=[Depends(require_role(["operator"]))])
 async def operator_load_show(body: OperatorCommandRequest) -> dict[str, object]:
     replay = _idempotent_begin_or_raise(
         scope="operator_load_show",
@@ -1143,7 +1175,7 @@ async def operator_load_show(body: OperatorCommandRequest) -> dict[str, object]:
     return result
 
 
-@app.post("/api/v1/operators/seek")
+@app.post("/api/v1/operators/seek", dependencies=[Depends(require_role(["operator"]))])
 async def operator_seek(body: OperatorCommandRequest) -> dict[str, object]:
     replay = _idempotent_begin_or_raise(
         scope="operator_seek",
@@ -1307,7 +1339,7 @@ async def get_ltc_status() -> LTCStatusResponse:
     )
 
 
-@app.post("/api/v1/ltc/mode", tags=["io"], response_model=dict[str, Any])
+@app.post("/api/v1/ltc/mode", tags=["io"], response_model=dict[str, Any], dependencies=[Depends(require_role(["operator"]))])
 async def set_ltc_mode(body: LTCSetModeRequest) -> dict[str, Any]:
     """Change the LTC sync mode and frame rate at runtime."""
     if not ltc_reader:
@@ -1321,15 +1353,13 @@ async def set_ltc_mode(body: LTCSetModeRequest) -> dict[str, Any]:
     }
 
 
-@app.post("/api/v1/collaboration/lock", tags=["collaboration"])
+@app.post("/api/v1/collaboration/lock", tags=["collaboration"], dependencies=[Depends(require_role(["operator"]))])
 async def take_lock(body: LockRequest) -> dict[str, object]:
     success = collaboration_manager.take_lock(body.resource_id, body.user_id)
-    if not success:
-         raise HTTPException(status_code=423, detail="Resource currently locked by another user")
-    return {"ok": True, "locks": collaboration_manager.get_locks()}
+    return {"ok": success, "locks": collaboration_manager.get_locks()}
 
 
-@app.delete("/api/v1/collaboration/lock")
+@app.delete("/api/v1/collaboration/lock", dependencies=[Depends(require_role(["operator"]))])
 async def release_lock(body: LockRequest) -> dict[str, object]:
     success = collaboration_manager.release_lock(body.resource_id, body.user_id)
     return {"ok": success, "locks": collaboration_manager.get_locks()}

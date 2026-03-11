@@ -47,21 +47,62 @@ const PlayClipNode = ({ data }: NodeProps) => {
   );
 };
 
+const TimerNode = ({ data }: NodeProps) => {
+  return (
+    <div style={{ background: '#7700aa', color: '#fff', padding: '10px', borderRadius: '5px', border: '1px solid #9900ff' }}>
+      <Handle type="target" position={Position.Left} id="in" />
+      <Handle type="source" position={Position.Right} id="out" />
+      <div>⏳ {data.label}</div>
+      <div style={{ fontSize: '10px', opacity: 0.8 }}>Delay: {data.delay_ms || 1000}ms</div>
+    </div>
+  );
+};
+
+const CounterNode = ({ data }: NodeProps) => {
+  return (
+    <div style={{ background: '#aa5500', color: '#fff', padding: '10px', borderRadius: '5px', border: '1px solid #ff7700' }}>
+      <Handle type="target" position={Position.Left} id="in" />
+      <Handle type="source" position={Position.Right} id="out" />
+      <div>🔢 {data.label}</div>
+      <div style={{ fontSize: '10px', opacity: 0.8 }}>Hits: {data.counter_target || 3}</div>
+    </div>
+  );
+};
+
+const LogicNode = ({ data }: NodeProps) => {
+  return (
+    <div style={{ background: '#aa0000', color: '#fff', padding: '10px', borderRadius: '5px', border: '1px solid #ff0000' }}>
+      <Handle type="target" position={Position.Left} id="in" />
+      <Handle type="source" position={Position.Right} id="out" />
+      <div>⚖️ {data.label}</div>
+      <div style={{ fontSize: '10px', opacity: 0.8 }}>If: {data.condition || 'payload.value > 0.5'}</div>
+    </div>
+  );
+};
+
 const nodeTypes = {
   cameraInput: CameraInputNode,
   yoloTrigger: YoloTriggerNode,
   playClip: PlayClipNode,
+  timer: TimerNode,
+  counter: CounterNode,
+  logic: LogicNode,
 };
 
 const initialNodes = [
   { id: '1', type: 'cameraInput', position: { x: 50, y: 150 }, data: { label: 'Camera M1' } },
   { id: '2', type: 'yoloTrigger', position: { x: 300, y: 150 }, data: { label: 'Detect: Person' } },
-  { id: '3', type: 'playClip', position: { x: 600, y: 150 }, data: { label: 'Play Clip: show2' } },
+  { id: '3', type: 'timer', position: { x: 550, y: 50 }, data: { label: 'Intro Delay', delay_ms: 2000 } },
+  { id: '4', type: 'counter', position: { x: 550, y: 250 }, data: { label: 'Gate Count', counter_target: 5 } },
+  { id: '5', type: 'playClip', position: { x: 800, y: 150 }, data: { label: 'Play Clip: show2' } },
 ];
 
 const initialEdges = [
   { id: 'e1-2', source: '1', target: '2', animated: true },
   { id: 'e2-3', source: '2', target: '3' },
+  { id: 'e2-4', source: '2', target: '4' },
+  { id: 'e3-5', source: '3', target: '5' },
+  { id: 'e4-5', source: '4', target: '5' },
 ];
 
 const DEFAULT_USER_ID = `operator-${Math.random().toString(36).slice(2, 7)}`;

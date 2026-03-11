@@ -305,6 +305,7 @@ class TriggerRule(BaseModel):
     source: Literal["osc", "http"] = "osc"
     cue_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+    logic: LogicConfig | None = None
 
 
 class TriggerRegisterRequest(BaseModel):
@@ -313,6 +314,7 @@ class TriggerRegisterRequest(BaseModel):
     source: Literal["osc", "http"] = "osc"
     cue_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+    logic: LogicConfig | None = None
 
 
 class TriggerFireRequest(BaseModel):

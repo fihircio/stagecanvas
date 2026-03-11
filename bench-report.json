@@ -1,7 +1,7 @@
 {
   "benchmark": "gpu_pipeline",
   "version": "1.0",
-  "timestamp_iso": "2026-03-11T04:39:58Z",
+  "timestamp_iso": "2026-03-11T06:34:43Z",
   "parameters": {
     "num_frames": 200,
     "width": 3840,
@@ -9,34 +9,34 @@
     "num_indices": 4096
   },
   "results": {
-    "composite_fps": 412.06,
+    "composite_fps": 549.55,
     "frame_time": {
-      "mean_ms": 2.4268,
-      "std_ms": 0.9883,
-      "min_ms": 1.5635,
-      "max_ms": 9.0711,
-      "p95_ms": 4.1302
+      "mean_ms": 1.8197,
+      "std_ms": 0.4674,
+      "min_ms": 1.4738,
+      "max_ms": 5.9412,
+      "p95_ms": 2.475
     },
     "vertex_pass": {
-      "mean_ms": 0.2084,
-      "std_ms": 0.1108,
-      "min_ms": 0.1514,
-      "max_ms": 0.7985,
-      "p95_ms": 0.4713
+      "mean_ms": 0.1612,
+      "std_ms": 0.0186,
+      "min_ms": 0.1474,
+      "max_ms": 0.3542,
+      "p95_ms": 0.1824
     },
     "fragment_pass": {
-      "mean_ms": 0.0317,
-      "std_ms": 0.0184,
-      "min_ms": 0.0239,
-      "max_ms": 0.1401,
-      "p95_ms": 0.0721
+      "mean_ms": 0.0239,
+      "std_ms": 0.0021,
+      "min_ms": 0.0224,
+      "max_ms": 0.0367,
+      "p95_ms": 0.0283
     },
     "texture_readout": {
-      "mean_ms": 1.8915,
-      "std_ms": 0.592,
-      "min_ms": 1.2644,
-      "max_ms": 6.3733,
-      "p95_ms": 2.9849
+      "mean_ms": 1.5023,
+      "std_ms": 0.4098,
+      "min_ms": 1.182,
+      "max_ms": 5.2988,
+      "p95_ms": 2.0866
     },
     "ptp_drift": {
       "mean_ms": 0.247653,

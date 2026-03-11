@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { auth } from '../lib/auth';
 
 export interface Lock {
     user_id: string;
@@ -23,7 +24,7 @@ export function useLocks(): UseLocksReturn {
 
     const fetchLocks = useCallback(async () => {
         try {
-            const res = await fetch(`${apiUrl}/api/v1/collaboration/locks`);
+            const res = await auth.fetch(`${apiUrl}/api/v1/collaboration/locks`);
             if (!res.ok) throw new Error('Failed to fetch locks');
             const data = await res.json();
             setLocks(data.locks);
@@ -51,7 +52,7 @@ export function useLocks(): UseLocksReturn {
 
     const takeControl = async (resourceId: string, userId: string) => {
         try {
-            const res = await fetch(`${apiUrl}/api/v1/collaboration/lock`, {
+            const res = await auth.fetch(`${apiUrl}/api/v1/collaboration/lock`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ resource_id: resourceId, user_id: userId }),
@@ -74,7 +75,7 @@ export function useLocks(): UseLocksReturn {
 
     const releaseControl = async (resourceId: string, userId: string) => {
         try {
-            const res = await fetch(`${apiUrl}/api/v1/collaboration/lock`, {
+            const res = await auth.fetch(`${apiUrl}/api/v1/collaboration/lock`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ resource_id: resourceId, user_id: userId }),
