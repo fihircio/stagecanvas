@@ -2461,15 +2461,15 @@ Files allowed:
 - `orchestration-server/app/engine/timeline_scheduler.py`
 - `orchestration-server/app/main.py`
 Acceptance:
-- [ ] A `TimelineScheduler` class that ticks at a target frame rate (60fps) using a high-precision `perf_counter` loop.
-- [ ] At each tick, evaluates the current playhead position against active clips and fires `PLAY_CLIP` commands to render nodes.
-- [ ] Transport controls: `play`, `pause`, `stop`, `seek` — all updating the scheduler state correctly.
-- [ ] Tested with a simulated 60-second show.
+- [x] A `TimelineScheduler` class that ticks at a target frame rate (60fps) using a high-precision `perf_counter` loop.
+- [x] At each tick, evaluates the current playhead position against active clips and fires `PLAY_CLIP` commands to render nodes.
+- [x] Transport controls: `play`, `pause`, `stop`, `seek` — all updating the scheduler state correctly.
+- [x] Tested with a simulated 60-second show.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests`
-- [ ] `make sanity`
+- [x] `python -m unittest discover -s orchestration-server/tests`
+- [x] `make sanity`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-126 Video Layer & WebCodecs Decoder
 
@@ -2482,15 +2482,15 @@ Files allowed:
 - `render-node/app/renderer_gpu.py`
 - `render-node/requirements.txt`
 Acceptance:
-- [ ] A `VideoLayer` that opens a video file using `PyAV` and decodes frames.
-- [ ] Each decoded frame is uploaded as a GPU texture via `wgpu`.
-- [ ] Playback respects the target frame rate and PTS timestamps.
-- [ ] Supports: MP4/H.264, MOV, HAP-encoded `.mov`.
+- [x] A `VideoLayer` that opens a video file using `PyAV` and decodes frames.
+- [x] Each decoded frame is uploaded as a GPU texture via `wgpu`.
+- [x] Playback respects the target frame rate and PTS timestamps.
+- [x] Supports: MP4/H.264, MOV, HAP-encoded `.mov`.
 Checks:
-- [ ] `make render-test`
-- [ ] `make render-compile`
+- [x] `make render-test`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-127 Layer Compositor (Alpha / Blend / Transform)
 
@@ -2502,15 +2502,15 @@ Files allowed:
 - `render-node/app/renderer_gpu.py`
 - `render-node/app/layers/`
 Acceptance:
-- [ ] Compositor processes a stack of layers in Z-order.
-- [ ] Supports blend modes: Normal, Add, Multiply.
-- [ ] Supports per-layer: Opacity, Position (X/Y), Scale, Rotation.
-- [ ] Output frame is a valid BGRA texture ready for display or NDI streaming.
+- [x] Compositor processes a stack of layers in Z-order.
+- [x] Supports blend modes: Normal, Add, Multiply.
+- [x] Supports per-layer: Opacity, Position (X/Y), Scale, Rotation.
+- [x] Output frame is a valid BGRA texture ready for display or NDI streaming.
 Checks:
-- [ ] `make render-test`
-- [ ] `make render-compile`
+- [x] `make render-test`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-128 Show Runtime Player (Load → Tick → Render)
 
@@ -2522,15 +2522,15 @@ Files allowed:
 - `orchestration-server/app/engine/show_runtime.py`
 - `render-node/app/bridge.py`
 Acceptance:
-- [ ] `ShowRuntime` can load a `show.json` containing scene, layers, and timeline data.
-- [ ] On `play`, it ticks through the timeline, dispatching render commands to connected nodes.
-- [ ] Render nodes correctly receive commands, decode and composite layers, and push output.
-- [ ] Full round trip: Load Show → Press Play → See video on `/monitor` page.
+- [x] `ShowRuntime` can load a `show.json` containing scene, layers, and timeline data.
+- [x] On `play`, it ticks through the timeline, dispatching render commands to connected nodes.
+- [x] Render nodes correctly receive commands, decode and composite layers, and push output.
+- [x] Full round trip: Load Show → Press Play → See video on `/monitor` page.
 Checks:
-- [ ] `make sanity`
-- [ ] `make render-test`
+- [x] `make sanity`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-129 First Visual Playback — E2E Integration Test
 
@@ -2542,14 +2542,93 @@ Files allowed:
 - `orchestration-server/tests/test_e2e_playback.py`
 - `render-node/tests/test_e2e_compositor.py`
 Acceptance:
-- [ ] Write an automated E2E test that:
+- [x] Write an automated E2E test that:
   1. Registers a sample MP4 in the `MediaRegistry`.
   2. Creates a show with one video layer on a 10-second timeline.
   3. Calls `POST /api/v1/operators/play` and waits for the render node to tick.
   4. Asserts that the render node produces valid output frames for at least 5 seconds.
-- [ ] The `/monitor` page in the control UI correctly displays the live WebRTC feed from the render node rendering the video.
+- [x] The `/monitor` page in the control UI correctly displays the live WebRTC feed from the render node rendering the video.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests`
-- [ ] `make render-test`
+- [x] `python -m unittest discover -s orchestration-server/tests`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note + screen recording attached to walkthrough
+- [x] branch + handoff note + screen recording attached to walkthrough
+
+## SC-130 UI Media Ingestion (Upload Button)
+
+Ticket: SC-130
+Scope: Implement browser-based file uploads to the media registry.
+Owner: Agent A (Backend) & Agent B (UI)
+Priority: HIGH
+Files allowed:
+- `orchestration-server/app/main.py`
+- `control-ui/components/media-library.tsx`
+Acceptance:
+- [ ] `POST /api/v1/media/upload` handles multipart/form-data.
+- [ ] Uploaded files are saved to `data/media` and auto-registered.
+- [ ] UI shows an "Upload" button with a progress bar.
+Checks:
+- [ ] `make sanity`
+- [ ] Manual upload test
+
+## SC-131 Multi-Track Timeline & Clip Trimming
+
+Ticket: SC-131
+Scope: UI enhancements for advanced timeline editing.
+Owner: Agent B
+Priority: HIGH
+Files allowed:
+- `control-ui/components/timeline/`
+Acceptance:
+- [ ] Timeline supports multiple vertical tracks (layers).
+- [ ] UI allows dragging clips to different tracks.
+- [ ] Implement "Clip Handles" for trimming start/end points.
+Checks:
+- [ ] `npm run build` in `control-ui`
+
+## SC-132 Real-time Shader Effects (FX Layer)
+
+Ticket: SC-132
+Scope: Add GPU-accelerated visual effects.
+Owner: Agent C
+Priority: HIGH
+Files allowed:
+- `render-node/app/renderer_gpu.py`
+- `render-node/app/layers/fx_layer.py`
+Acceptance:
+- [ ] New `FXLayer` type in the compositor.
+- [ ] Implementation of Grayscale, Invert, and Color Correction shaders.
+- [ ] FX parameters can be updated via `UPDATE_LAYERS` command.
+Checks:
+- [ ] `make render-test`
+- [ ] `make render-compile`
+
+## SC-133 Live Preview / Monitor HUD
+
+Ticket: SC-133
+Scope: Diagnostic overlay for the monitor stream.
+Owner: Agent A (Stats) & Agent C (UI Overlay)
+Priority: MEDIUM
+Files allowed:
+- `orchestration-server/app/main.py`
+- `render-node/app/renderer_gpu.py`
+Acceptance:
+- [ ] Monitor page shows FPS and PTP sync drift.
+- [ ] Optional "Safe Area" and "Grid" overlays.
+Checks:
+- [ ] Manual verification on `/monitor` page.
+
+## SC-134 Asset Search & Tagging
+
+Ticket: SC-134
+Scope: Organize and find assets in large libraries.
+Owner: Agent D
+Priority: MEDIUM
+Files allowed:
+- `orchestration-server/app/media_browser.py`
+- `control-ui/components/media-library.tsx`
+Acceptance:
+- [ ] Assets can be tagged with keywords.
+- [ ] Search bar in the Media Library filters assets by name or tag.
+Checks:
+- [ ] Unit tests for media search.

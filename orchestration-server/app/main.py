@@ -247,7 +247,10 @@ async def _startup() -> None:
     file_watcher = FileWatcherService(AUTO_IMPORT_DIR, media_registry)
     file_watcher.start(asyncio.get_running_loop())
     
-    # [MOVED TO MODULE LEVEL] logic_state, _fire_trigger_internal
+    # MidiOscMapper initialization
+    async def mapper_dispatch(cmd: ControlCommand):
+        target_ids = await registry.active_node_ids()
+        await _dispatch_to_nodes(cmd, target_ids)
 
     midi_osc_mapper = MidiOscMapper(
         db_path=DATA_DIR / "orchestration.db",
