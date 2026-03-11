@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import hashlib
 import json
 import os
 import time
+from typing import Any, Optional, Literal, Union
 from contextlib import suppress
 from email.parser import BytesParser
 from email.policy import default
@@ -55,7 +57,10 @@ from .services.transcoder import TranscodeWorker
 from .io.ltc_reader import LTCReader, LTCSyncMode
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
-app = FastAPI(title="StageCanvas Orchestration Server", version="0.1.0")
+app = FastAPI(
+    title="StageCanvas Orchestration Server",
+)
+logger = logging.getLogger("orchestration")
 registry = NodeRegistry()
 MEDIA_STORAGE_DIR = Path(__file__).resolve().parent.parent / "data" / "media"
 RENDER_CACHE_DIR = Path(__file__).resolve().parents[2] / "render-node" / "data" / "cache"
@@ -293,8 +298,9 @@ async def register_node(body: RegisterNodeRequest) -> dict[str, object]:
     }
 
 
-@app.post("/api/v1/nodes/{node_id}/heartbeat")
-async def node_heartbeat(node_id: str, body: HeartbeatRequest) -> dict[str, object]:
+@app.post("/api/v1/nodes/{node_id}/heartbeat", tags=["nodes"])
+async def node_heartbeat(node_id: str, body: HeartbeatRequest) -> dict[str, Any]:
+    """Receive heartbeat and performance metrics from a render node."""
     record = await registry.heartbeat(node_id, body)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
@@ -302,21 +308,23 @@ async def node_heartbeat(node_id: str, body: HeartbeatRequest) -> dict[str, obje
 
 
 @app.get("/api/v1/nodes", tags=["nodes"])
-async def list_nodes() -> list[dict[str, Any]]:
+async def list_nodes() -> dict[str, Any]:
     """List all registered render nodes and their status."""
     return {"nodes": await registry.list_nodes()}
 
 
-@app.get("/api/v1/nodes/{node_id}/drift_history")
+@app.get("/api/v1/nodes/{node_id}/drift_history", tags=["nodes"])
 async def node_drift_history(node_id: str) -> dict[str, object]:
+    """Retrieve the drift history for a specific render node."""
     record = await registry.get(node_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
     return {"node_id": node_id, "history": await registry.get_drift_history(node_id)}
 
 
-@app.post("/api/v1/preview/snapshot")
+@app.post("/api/v1/preview/snapshot", tags=["preview"])
 async def preview_snapshot(body: PreviewSnapshotRequest) -> dict[str, object]:
+    """Request a snapshot of the current state from render nodes."""
     target_ids = body.node_ids or await registry.active_node_ids()
     nodes = await registry.list_nodes()
     node_by_id = {node["node_id"]: node for node in nodes}
@@ -347,8 +355,9 @@ async def preview_snapshot(body: PreviewSnapshotRequest) -> dict[str, object]:
     return {"ok": True, "requested_count": len(target_ids), "snapshots": snapshots}
 
 
-@app.post("/api/v1/preview/image")
+@app.post("/api/v1/preview/image", tags=["preview"])
 async def preview_image(body: PreviewImageRequest) -> dict[str, object]:
+    """Request a preview image from render nodes."""
     target_ids = body.node_ids or await registry.active_node_ids()
     now_ms = int(time.time() * 1000)
     images: list[dict[str, object]] = []
@@ -366,8 +375,9 @@ async def preview_image(body: PreviewImageRequest) -> dict[str, object]:
     return {"ok": True, "requested_count": len(target_ids), "images": images}
 
 
-@app.post("/api/v1/media")
+@app.post("/api/v1/media", tags=["media"])
 async def register_media_asset(body: MediaAssetCreateRequest) -> dict[str, object]:
+    """Register a new media asset."""
     record, is_new, idempotent = await media_registry.register(body)
     if not idempotent:
         raise HTTPException(
@@ -380,30 +390,33 @@ async def register_media_asset(body: MediaAssetCreateRequest) -> dict[str, objec
     return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "idempotent": not is_new}
 
 
-@app.get("/api/v1/media")
-async def list_media_assets() -> dict[str, object]:
+@app.get("/api/v1/media", tags=["media"])
+async def list_media_assets() -> dict[str, Any]:
+    """List all media assets in the registry."""
     assets = await media_registry.list_assets()
     return {"assets": [asset.model_dump(mode="json") for asset in assets]}
 
 
-@app.get("/api/v1/media/{asset_id}")
-async def get_media_asset(asset_id: str) -> dict[str, object]:
+@app.get("/api/v1/media/{asset_id}", tags=["media"])
+async def get_media_asset(asset_id: str) -> dict[str, Any]:
     record = await media_registry.get(asset_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
     return {"asset": record.to_response().model_dump(mode="json")}
 
 
-@app.patch("/api/v1/media/{asset_id}")
-async def update_media_asset(asset_id: str, body: MediaAssetUpdateRequest) -> dict[str, object]:
+@app.patch("/api/v1/media/{asset_id}", tags=["media"])
+async def update_media_asset(asset_id: str, body: MediaAssetUpdateRequest) -> dict[str, Any]:
+    """Update metadata for an existing media asset."""
     record = await media_registry.update(asset_id, body)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
     return {"ok": True, "asset": record.to_response().model_dump(mode="json")}
 
 
-@app.post("/api/v1/media/{asset_id}/transcode")
-async def enqueue_transcode_job(asset_id: str, body: TranscodeJobCreateRequest) -> dict[str, object]:
+@app.post("/api/v1/media/{asset_id}/transcode", tags=["media"])
+async def enqueue_transcode_job(asset_id: str, body: TranscodeJobCreateRequest) -> dict[str, Any]:
+    """Enqueue a background transcoding job for a specific asset."""
     record = await media_registry.get(asset_id)
     if record is None:
         raise HTTPException(status_code=404, detail=f"Asset not found: {asset_id}")
@@ -411,14 +424,16 @@ async def enqueue_transcode_job(asset_id: str, body: TranscodeJobCreateRequest) 
     return {"ok": True, "job": job.to_response().model_dump(mode="json")}
 
 
-@app.get("/api/v1/transcode/jobs")
-async def list_transcode_jobs() -> dict[str, object]:
+@app.get("/api/v1/transcode/jobs", tags=["media"])
+async def list_transcode_jobs() -> dict[str, Any]:
+    """List all current background transcoding jobs."""
     jobs = await transcode_queue.list_jobs()
     return {"jobs": [job.model_dump(mode="json") for job in jobs]}
 
 
-@app.get("/api/v1/transcode/jobs/{job_id}")
-async def get_transcode_job(job_id: str) -> dict[str, object]:
+@app.get("/api/v1/transcode/jobs/{job_id}", tags=["media"])
+async def get_transcode_job(job_id: str) -> dict[str, Any]:
+    """Retrieve details and progress of a specific transcoding job."""
     job = await transcode_queue.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Transcode job not found: {job_id}")
@@ -499,8 +514,9 @@ async def upload_media_asset(request: Request) -> dict[str, object]:
     return {"ok": True, "asset": record.to_response().model_dump(mode="json"), "idempotent": not is_new}
 
 
-@app.post("/api/v1/triggers/register")
-async def register_trigger_rule(body: TriggerRegisterRequest) -> dict[str, object]:
+@app.post("/api/v1/triggers/register", tags=["io"])
+async def register_trigger_rule(body: TriggerRegisterRequest) -> dict[str, Any]:
+    """Register a new external trigger rule (OSC, MIDI, or ArtNet)."""
     rule = TriggerRule(
         rule_id=body.rule_id,
         name=body.name,
@@ -512,13 +528,15 @@ async def register_trigger_rule(body: TriggerRegisterRequest) -> dict[str, objec
     return {"ok": True, "rule": rule.model_dump(mode="json")}
 
 
-@app.get("/api/v1/triggers/rules")
-async def list_trigger_rules() -> dict[str, object]:
+@app.get("/api/v1/triggers/rules", tags=["io"])
+async def list_trigger_rules() -> dict[str, Any]:
+    """List all active trigger rules."""
     return {"rules": [rule.model_dump(mode="json") for rule in trigger_rules.values()]}
 
 
-@app.post("/api/v1/triggers/fire")
-async def fire_trigger(body: TriggerFireRequest) -> dict[str, object]:
+@app.post("/api/v1/triggers/fire", tags=["io"])
+async def fire_trigger(body: TriggerFireRequest) -> dict[str, Any]:
+    """Manually fire a trigger rule."""
     rule = trigger_rules.get(body.rule_id)
     if rule is None:
         raise HTTPException(
@@ -539,8 +557,9 @@ async def fire_trigger(body: TriggerFireRequest) -> dict[str, object]:
     return {"ok": True, "event": event.model_dump(mode="json")}
 
 
-@app.get("/api/v1/triggers/events")
-async def list_trigger_events() -> dict[str, object]:
+@app.get("/api/v1/triggers/events", tags=["io"])
+async def list_trigger_events() -> dict[str, Any]:
+    """Retrieve the recent history of fired trigger events."""
     return {"events": [event.model_dump(mode="json") for event in trigger_events]}
 
 
@@ -553,8 +572,9 @@ async def slo_snapshot() -> dict[str, object]:
     }
 
 
-@app.get("/api/v1/timeline/snapshot", response_model=TimelineSnapshotResponse)
+@app.get("/api/v1/timeline/snapshot", tags=["shows"], response_model=TimelineSnapshotResponse)
 async def timeline_snapshot(show_id: str = "demo-show") -> TimelineSnapshotResponse:
+    """Get the full state snapshot of a show's timeline."""
     nodes = await registry.list_nodes()
     playhead_ms = 0
     if nodes:
@@ -565,8 +585,9 @@ async def timeline_snapshot(show_id: str = "demo-show") -> TimelineSnapshotRespo
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.get("/api/v1/timeline/shows", response_model=list[TimelineShowSummary])
+@app.get("/api/v1/timeline/shows", tags=["shows"], response_model=list[TimelineShowSummary])
 async def timeline_list_shows() -> list[TimelineShowSummary]:
+    """List all shows in the timeline repository."""
     return timeline_repo.list_shows()
 
 
