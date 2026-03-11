@@ -289,6 +289,16 @@ class TranscodeJobResponse(BaseModel):
     updated_at_ms: int
 
 
+# ---------------------------------------------------------------------------
+# SC-112 — Visual Scripting Logic
+# ---------------------------------------------------------------------------
+
+class LogicConfig(BaseModel):
+    """Configuration for stateful logic nodes in a trigger chain."""
+    delay_ms: int | None = Field(default=None, description="Delay before execution")
+    counter_target: int | None = Field(default=None, description="Number of hits before firing")
+    condition: str | None = Field(default=None, description="Restricted eval condition (e.g. payload.x > 0.5)")
+
 class TriggerRule(BaseModel):
     rule_id: str = Field(min_length=1)
     name: str | None = None
@@ -398,3 +408,37 @@ class ArchiveJobResponse(BaseModel):
     status: ArchiveJobStatus
     archive_url: str | None = None
     error_message: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# SC-113 — Enterprise RBAC & User Management
+# ---------------------------------------------------------------------------
+
+UserRole = Literal["viewer", "operator", "designer", "admin"]
+
+
+class User(BaseModel):
+    user_id: str
+    username: str
+    full_name: str | None = None
+    role: UserRole = "viewer"
+    disabled: bool | None = None
+
+
+class UserInDB(User):
+    hashed_password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    username: str | None = None
+    role: UserRole | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str

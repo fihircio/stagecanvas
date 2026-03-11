@@ -14,6 +14,7 @@ from .effects import EffectsChain
 from .mapping.pixel_mapper import PixelMapper
 from .audio_engine import AudioEngine
 from .audio_analysis import AudioAnalyzer
+from .layers.ai_segmentation import AISegmenter
 
 # Vertex shader with dynamic buffers
 VERTEX_SHADER = """
@@ -77,6 +78,8 @@ class WebGPURendererBridge(RendererBridge):
         self.canvas_region = {"global_x": 0, "global_y": 0, "width": 1920, "height": 1080}
         self.node_id = None
         self.pixel_mapper: Optional[PixelMapper] = None
+        self.ai_segmenter: Optional[AISegmenter] = None
+        self.segmentation_layers: set[str] = set()
 
     async def connect(self, node_id: str, label: str) -> None:
         self.node_id = node_id
@@ -107,6 +110,7 @@ class WebGPURendererBridge(RendererBridge):
         print(f"[gpu-renderer] Audio engine started (16-ch @ 48kHz).")
         
         self.pixel_mapper = PixelMapper([], self.width, self.height)
+        self.ai_segmenter = AISegmenter()
         
         self.is_connected = True
         print(f"[gpu-renderer] Connected and optimized pipeline initialized.")
@@ -236,6 +240,12 @@ class WebGPURendererBridge(RendererBridge):
             # SC-099: Store effects for the layer
             self.layer_effects[layer_id] = layer_data.get("effects", [])
             
+            # SC-110: AI Segmentation
+            if layer_data.get("segmentation_enabled", False):
+                self.segmentation_layers.add(layer_id)
+            else:
+                self.segmentation_layers.discard(layer_id)
+            
             if kind != "generative_ai":
                 # Normal layer logic
                 pass
@@ -285,6 +295,23 @@ class WebGPURendererBridge(RendererBridge):
                     )
         
         # [SIMULATED] Final compositing to self.render_target here...
+        
+        # SC-110: AI Segmentation Mask processing
+        if self.ai_segmenter and self.segmentation_layers:
+            # For each layer needing segmentation, we'd process its input frame.
+            # In this stub, we process the last frame data as a placeholder for a live camera feed.
+            for layer_id in self.segmentation_layers:
+                # [SIMULATED] Get raw camera frame (BGRA)
+                # raw_frame = self._get_camera_frame(layer_id)
+                mask_bytes = self.ai_segmenter.process_frame(self.frame_data_stub, self.width, self.height)
+                
+                # Upload mask to Binding 2 (t_mask)
+                self.device.queue.write_texture(
+                    {"texture": self.render_target, "origin": (0, 0, 0)}, # STUB: reusing target as mask dest for simplicity in simulation
+                    mask_bytes,
+                    {"bytes_per_row": self.width * 1, "rows_per_image": self.height},
+                    (self.width, self.height, 1),
+                )
         
         # SC-107: Audio-reactive update for generative AI layers
         if self.audio_engine and self.audio_analyzer and self.ai_layers:

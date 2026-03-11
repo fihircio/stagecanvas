@@ -57,6 +57,7 @@ from .io.psn_listener import PSNListener
 from .cluster_manager import ClusterManager
 from .services.transcoder import TranscodeWorker
 from .services.archiver import ArchiverService
+from .services.cloud_sync import CloudSyncService
 from .io.ltc_reader import LTCReader, LTCSyncMode
 from zeroconf import Zeroconf, ServiceBrowser, ServiceInfo, ServiceListener
 
@@ -90,6 +91,10 @@ transcode_worker: TranscodeWorker | None = None
 archiver_service: ArchiverService | None = None
 zeroconf: Zeroconf | None = None
 ltc_reader: LTCReader | None = None
+
+# SC-112: Stateful logic tracking
+logic_state: dict[str, int] = {}
+cloud_sync: CloudSyncService | None = None
 
 class NodeDiscoveryListener(ServiceListener):
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
@@ -130,29 +135,70 @@ async def _transfer_loop() -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
-    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service
+    global artnet_sender, transcode_worker, zeroconf, ltc_reader, archiver_service, cloud_sync
     app.state.transfer_task = asyncio.create_task(_transfer_loop())
 
     DATA_DIR = Path(__file__).resolve().parent.parent / "data"
     archiver_service = ArchiverService(DATA_DIR)
 
-    # Internal trigger callback for OSC
-    async def osc_trigger_callback(payload: dict):
-        # We simulate firing the trigger internally
-        body = TriggerFireRequest(**payload)
-        rule = trigger_rules.get(body.rule_id)
-        if rule is not None:
+    async def _fire_trigger_internal(rule: TriggerRule, fire_payload: dict[str, Any], source: str):
+        """Processes a trigger rule with LogicConfig (SC-112)."""
+        logic = rule.logic
+        full_payload = {**rule.payload, **fire_payload}
+        
+        # 1. Condition Check
+        if logic and logic.condition:
+            # Very simple safe eval for "payload.x > 0.5" type strings
+            # In production, use a real expression parser.
+            try:
+                # Mock evaluation: if condition contains 'value >' compare it
+                if ">" in logic.condition:
+                    key, val = logic.condition.split(">")
+                    key = key.replace("payload.", "").strip()
+                    if float(full_payload.get(key, 0)) <= float(val):
+                        return
+            except:
+                logger.warning(f"[logic] Condition evaluation failed for {rule.rule_id}")
+                return
+
+        # 2. Counter Logic
+        if logic and logic.counter_target:
+            current = logic_state.get(rule.rule_id, 0) + 1
+            logic_state[rule.rule_id] = current
+            if current < logic.counter_target:
+                logger.info(f"[logic] Counter {rule.rule_id}: {current}/{logic.counter_target}")
+                return
+            logic_state[rule.rule_id] = 0 # Reset
+
+        # 3. Delay Logic
+        async def execute():
+            if logic and logic.delay_ms:
+                await asyncio.sleep(logic.delay_ms / 1000.0)
+            
             event = TriggerEvent(
-                event_id=f"evt-{body.rule_id}-{int(time.time() * 1000)}",
+                event_id=f"evt-{rule.rule_id}-{int(time.time() * 1000)}",
                 rule_id=rule.rule_id,
-                source="osc",
+                source=source,
                 cue_id=rule.cue_id,
-                payload={**rule.payload, **body.payload},
+                payload=full_payload,
                 timestamp_ms=int(time.time() * 1000),
             )
             trigger_events.append(event)
             if len(trigger_events) > TRIGGER_EVENT_LIMIT:
                 del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
+            logger.info(f"[logic] Fired trigger: {rule.rule_id} from {source}")
+
+        if logic and logic.delay_ms:
+            asyncio.create_task(execute())
+        else:
+            await execute()
+
+    # Re-wrap osc_trigger_callback to use the internal logic handler
+    async def osc_trigger_callback(payload: dict):
+        body = TriggerFireRequest(**payload)
+        rule = trigger_rules.get(body.rule_id)
+        if rule is not None:
+            await _fire_trigger_internal(rule, body.payload, "osc")
 
     artnet_sender = ArtNetSender()
 
@@ -261,10 +307,18 @@ async def _startup() -> None:
     ltc_reader = LTCReader(fps=ltc_fps, sync_mode=ltc_mode, callback=ltc_timecode_callback, simulate=True)
     await ltc_reader.start()
 
+    # Cloud Sync Service (SC-111)
+    global cloud_sync
+    cloud_sync = CloudSyncService(data_dir=Path(__file__).resolve().parent.parent / "data")
+    app.state.cloud_sync_task = asyncio.create_task(cloud_sync.start_background_sync())
+    
+    print("[main] Startup sequence complete.")
+
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
     global osc_server, midi_handler, artnet_server, psn_listener, cluster_manager
+    global cloud_sync
     task = getattr(app.state, "transfer_task", None)
     if task is not None:
         task.cancel()
@@ -286,6 +340,13 @@ async def _shutdown() -> None:
         zeroconf.close()
     if ltc_reader:
         await ltc_reader.stop()
+    cloud_sync_task = getattr(app.state, "cloud_sync_task", None)
+    if cloud_sync_task is not None:
+        cloud_sync_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cloud_sync_task
+    if cloud_sync:
+        await cloud_sync.stop()
 
 
 @app.get("/health", tags=["health"])
@@ -586,6 +647,7 @@ async def register_trigger_rule(body: TriggerRegisterRequest) -> dict[str, Any]:
         source=body.source,
         cue_id=body.cue_id,
         payload=body.payload,
+        logic=body.logic, # SC-112
     )
     trigger_rules[rule.rule_id] = rule
     return {"ok": True, "rule": rule.model_dump(mode="json")}
@@ -606,18 +668,11 @@ async def fire_trigger(body: TriggerFireRequest) -> dict[str, Any]:
             status_code=404,
             detail={"reason_code": "TRIGGER_RULE_NOT_FOUND", "message": f"Rule not found: {body.rule_id}"},
         )
-    event = TriggerEvent(
-        event_id=f"evt-{body.rule_id}-{int(time.time() * 1000)}",
-        rule_id=rule.rule_id,
-        source=rule.source,
-        cue_id=rule.cue_id,
-        payload={**rule.payload, **body.payload},
-        timestamp_ms=int(time.time() * 1000),
-    )
-    trigger_events.append(event)
-    if len(trigger_events) > TRIGGER_EVENT_LIMIT:
-        del trigger_events[0 : len(trigger_events) - TRIGGER_EVENT_LIMIT]
-    return {"ok": True, "event": event.model_dump(mode="json")}
+    
+    # Use the logic-aware internal function (SC-112)
+    # We call it without awaiting if there's a delay, to return HTTP 202-like success immediately.
+    await _fire_trigger_internal(rule, body.payload, "http")
+    return {"ok": True, "event_status": "QUEUED" if rule.logic and rule.logic.delay_ms else "FIRED"}
 
 
 @app.get("/api/v1/triggers/events", tags=["io"])

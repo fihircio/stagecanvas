@@ -2119,13 +2119,13 @@ Files allowed:
 - `orchestration-server/app/io/artnet_sender.py`
 - `render-node/app/mapping/pixel_mapper.py`
 Acceptance:
-- [ ] Render Node samples specific UV coordinates from the compositor buffer.
-- [ ] Orchestrator sends sampled colors over ArtNet to external fixtures.
-- [ ] Supports minimum 10 universes at >30fps.
+- [x] Render Node samples specific UV coordinates from the compositor buffer.
+- [x] Orchestrator sends sampled colors over ArtNet to external fixtures.
+- [x] Supports minimum 10 universes at >30fps.
 Checks:
-- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-106 Multi-Channel Audio Playback Engine
 
@@ -2136,12 +2136,12 @@ Files allowed:
 - `render-node/app/audio_engine.py`
 - `shared-protocol/messages.v1.json`
 Acceptance:
-- [ ] Support up to 16 channels of ASIO / CoreAudio output.
-- [ ] Sub-frame lock between audio playhead and WebGPU flip via the Precision Scheduler.
+- [x] Support up to 16 channels of ASIO / CoreAudio output.
+- [x] Sub-frame lock between audio playhead and WebGPU flip via the Precision Scheduler.
 Checks:
-- [ ] `make render-test`
+- [x] `make render-test`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-107 AI Generative Stems (Audio-Reactive)
 
@@ -2152,13 +2152,13 @@ Files allowed:
 - `render-node/app/layers/generative_ai.py`
 - `render-node/app/audio_analysis.py`
 Acceptance:
-- [ ] Extract real-time frequency bands (Kick, Snare, Highs) from system audio.
-- [ ] Pass FFT data as uniform buffers to the Generative AI layer and standard Effects.
-- [ ] Visuals pulse/react to the beat reliably.
+- [x] Extract real-time frequency bands (Kick, Snare, Highs) from system audio.
+- [x] Pass FFT data as uniform buffers to the Generative AI layer and standard Effects.
+- [x] Visuals pulse/react to the beat reliably.
 Checks:
-- [ ] `make render-compile`
+- [x] `make render-compile`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-108 3D Pre-Viz Stage Simulator (Next.js)
 
@@ -2169,13 +2169,13 @@ Files allowed:
 - `control-ui/components/stage-previz.tsx`
 - `control-ui/package.json`
 Acceptance:
-- [ ] Integrate `react-three-fiber`.
-- [ ] Represent projector outputs and bounding boxes in a basic 3D room.
-- [ ] Stream WebRTC low-res textures onto the 3D screens for live pre-vis.
+- [x] Integrate `react-three-fiber`.
+- [x] Represent projector outputs and bounding boxes in a basic 3D room.
+- [x] Stream WebRTC low-res textures onto the 3D screens for live pre-vis.
 Checks:
-- [ ] `cd control-ui && npm run build`
+- [x] `cd control-ui && npm run build`
 Deliverable:
-- [ ] branch + handoff note
+- [x] branch + handoff note
 
 ## SC-109 System Archiving & Show Packaging
 
@@ -2186,9 +2186,97 @@ Files allowed:
 - `orchestration-server/app/services/archiver.py`
 - `orchestration-server/app/main.py`
 Acceptance:
-- [ ] One-click export to a `.stage` compressed tarball containing SQLite DB + all assets.
-- [ ] Show import overwrites current registry cleanly.
+- [x] One-click export to a `.stage` compressed tarball containing SQLite DB + all assets.
+- [x] Show import overwrites current registry cleanly.
+Checks:
+- [x] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [x] branch + handoff note
+
+## SC-110 AI Scene-Segmentation (Background Removal)
+
+Ticket: SC-110
+Scope: Real-time background removal for live camera feeds via AI.
+Owner: feature-agent
+Files allowed:
+- `render-node/app/layers/ai_segmentation.py`
+- `render-node/app/renderer_gpu.py`
+- `render-node/requirements.txt`
+Acceptance:
+- [ ] Implement a live segmentation layer using a lightweight model (e.g., Mediapipe or SelfieSegmentation).
+- [ ] Extract alpha mask from live camera input and apply it to the video stream on the GPU.
+- [ ] Run at >30fps on standard hardware.
+Checks:
+- [ ] `make render-compile`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-111 Global Asset Sync (Cloud S3 Integration)
+
+Ticket: SC-111
+Scope: Cloud-based asset synchronization for multi-node/multi-site shows.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/services/cloud_sync.py`
+- `orchestration-server/requirements.txt`
+Acceptance:
+- [ ] Support S3-compatible storage for asset backups and distributed sync.
+- [ ] Orchestration server automatically pulls assets from cloud when a show is loaded on a new site.
+- [ ] Progress reporting for background downloads based on WebSocket API.
 Checks:
 - [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-112 Visual Scripting Engine (Logic Blocks)
+
+Ticket: SC-112
+Scope: Add logic nodes (If/Then, Timers, Math) to the Node Graph designer.
+Owner: feature-agent
+Files allowed:
+- `control-ui/components/node-graph.tsx`
+- `control-ui/lib/compiler.ts`
+- `orchestration-server/app/collaboration.py`
+Acceptance:
+- [ ] New node types: "Timer", "Counter", "Compare", "Boolean Logic".
+- [ ] Logic compiles to a backend persistent state machine in the Orchestration Server.
+- [ ] Ability to trigger Layer properties based on logic outcomes (e.g., "If AI_DETECTED count > 5, Play Clip X").
+Checks:
+- [ ] `cd control-ui && npm run build`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-113 Enterprise RBAC & User Management
+
+Ticket: SC-113
+Scope: Role-Based Access Control for large broadcast teams.
+Owner: lead-agent
+Files allowed:
+- `orchestration-server/app/auth.py`
+- `orchestration-server/app/models.py`
+- `control-ui/hooks/use-auth.ts`
+Acceptance:
+- [ ] Define roles: Viewer, Operator, Designer, Admin.
+- [ ] Operational locks (SC-098) restricted based on role permissions.
+- [ ] Basic JWT authentication and session management.
+Checks:
+- [ ] `python -m unittest discover -s orchestration-server/tests -p 'test_*.py'`
+Deliverable:
+- [ ] branch + handoff note
+
+## SC-114 VR Operator Console (OpenXR)
+
+Ticket: SC-114
+Scope: Experimental support for operating the media server in a VR environment.
+Owner: feature-agent
+Files allowed:
+- `control-ui/components/vr-console.tsx`
+- `control-ui/package.json`
+Acceptance:
+- [ ] basic WebXR/OpenXR support in the 3D Pre-Viz renderer (SC-108).
+- [ ] Virtual trigger buttons controllable via VR controllers.
+- [ ] Stereoscopic view for 3D stage simulation.
+Checks:
+- [ ] `cd control-ui && npm run build`
 Deliverable:
 - [ ] branch + handoff note

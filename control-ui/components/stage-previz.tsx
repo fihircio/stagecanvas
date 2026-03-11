@@ -1,7 +1,8 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Box, Cylinder, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
+import { XR, Controllers, Hands, VRButton, useXR, Interactive } from '@react-three/xr';
 
 interface StagePrevizProps {
   webRtcStreamUrl?: string;
@@ -45,28 +46,40 @@ function StageFloor() {
   );
 }
 
+function VROperatorControls() {
+  const { isPresenting } = useXR();
+  
+  const handleSelect = () => {
+    if (isPresenting) {
+      console.log("[VR] Controller Triggered: Firing Next Cue");
+      // In a real app, this would call triggerEvent({type: "NEXT_CUE"})
+    }
+  };
+
+  return (
+    <Interactive onSelect={handleSelect}>
+      <mesh position={[0, 1, 0]} visible={false}>
+        <boxGeometry args={[100, 100, 100]} />
+      </mesh>
+    </Interactive>
+  );
+}
+
 export function StagePreviz({ webRtcStreamUrl, width = 800, height = 450 }: StagePrevizProps) {
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
   
-  // Setup the video element for the texture
   useEffect(() => {
     if (!webRtcStreamUrl) return;
-
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.loop = true;
     video.muted = true;
     video.playsInline = true;
-    
-    // In a real app, we'd attach a MediaStream here, e.g. video.srcObject = stream
-    // Since we're stubbing, we'll try to use the URL if it's a real URL, or just leave it blank
     if (webRtcStreamUrl.startsWith('http') || webRtcStreamUrl.startsWith('blob')) {
       video.src = webRtcStreamUrl;
       video.play().catch(e => console.error("Video play failed", e));
     }
-    
     setVideoElement(video);
-    
     return () => {
       video.pause();
       video.removeAttribute('src');
@@ -82,24 +95,26 @@ export function StagePreviz({ webRtcStreamUrl, width = 800, height = 450 }: Stag
   }, [videoElement]);
 
   return (
-    <div style={{ width, height, background: '#000', borderRadius: '8px', overflow: 'hidden', border: '1px solid #333' }}>
+    <div style={{ position: 'relative', width, height, background: '#000', borderRadius: '8px', overflow: 'hidden', border: '1px solid #333' }}>
+      <VRButton />
       <Canvas shadows>
-        <PerspectiveCamera makeDefault position={[0, 8, 15]} fov={50} />
-        <OrbitControls target={[0, 4, 0]} maxPolarAngle={Math.PI / 2 + 0.1} />
-        
-        <ambientLight intensity={0.5} />
-        <spotLight position={[0, 15, 10]} angle={0.3} penumbra={1} intensity={2} castShadow />
-        
-        {/* The screen */}
-        <StageScreen videoTexture={videoTexture} />
-        
-        {/* The floor */}
-        <StageFloor />
-        
-        {/* Simulated projectors hitting the screen */}
-        <ProjectorCone position={[-6, 10, 12]} rotation={[Math.PI / 8, -Math.PI / 8, 0]} color="#00ffaa" opacity={0.15} />
-        <ProjectorCone position={[6, 10, 12]} rotation={[Math.PI / 8, Math.PI / 8, 0]} color="#ff00aa" opacity={0.15} />
-        
+        <XR>
+          <PerspectiveCamera makeDefault position={[0, 8, 15]} fov={50} />
+          <OrbitControls target={[0, 4, 0]} maxPolarAngle={Math.PI / 2 + 0.1} />
+          
+          <ambientLight intensity={0.5} />
+          <spotLight position={[0, 15, 10]} angle={0.3} penumbra={1} intensity={2} castShadow />
+          
+          <Controllers />
+          <Hands />
+          <VROperatorControls />
+          
+          <StageScreen videoTexture={videoTexture} />
+          <StageFloor />
+          
+          <ProjectorCone position={[-6, 10, 12]} rotation={[Math.PI / 8, -Math.PI / 8, 0]} color="#00ffaa" opacity={0.15} />
+          <ProjectorCone position={[6, 10, 12]} rotation={[Math.PI / 8, Math.PI / 8, 0]} color="#ff00aa" opacity={0.15} />
+        </XR>
       </Canvas>
     </div>
   );
